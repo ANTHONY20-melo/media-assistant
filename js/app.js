@@ -729,10 +729,18 @@ const App = (() => {
       $('v-signOpacity').textContent = $('signOpacity').value;
       $('signColorHex').textContent = $('signColor').value;
     };
-    ['signSize', 'signOpacity', 'signColor'].forEach(id =>
-      $(id).addEventListener('input', syncVals));
-    $('btnSignSave').addEventListener('click', () => {
+    const updateLive = () => {
+      // Atualiza state.settings.signature em tempo real para preview/exportação imediata
       state.settings.signature = to();
+      if (state.previewSignature) render();
+    };
+    // Sincroniza displays e atualiza estado ao vivo em qualquer mudança
+    ['signEnabled', 'signText', 'signFont', 'signSize', 'signOpacity', 'signPosition', 'signColor', 'signShadow'].forEach(id => {
+      const el = $(id);
+      if (el) el.addEventListener('input', () => { syncVals(); updateLive(); });
+    });
+    // Botão "Salvar padrão" persiste no localStorage
+    $('btnSignSave').addEventListener('click', () => {
       Storage.saveSettings(state.settings);
       toast('Assinatura salva no navegador');
     });
