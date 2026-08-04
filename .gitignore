@@ -4,3 +4,5 @@ node_modules/
 Thumbs.db
 .playwright-mcp/
 .vercel/
+
+.vercel
