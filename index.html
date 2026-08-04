@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JARVIS Studio — Assistente de Mídia</title>
+<link rel="icon" href="assets/logo.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="toolbar">
+  <span class="brand"><img class="brand-logo" src="assets/logo.png" alt="Logo"> JARVIS Studio <small>assistente de mídia</small></span>
+  <button id="btnOpen" title="Abrir imagens">📂 Abrir</button>
+  <button id="btnExport" title="Exportar (Ctrl+S)">💾 Exportar</button>
+  <select id="exportFormat" title="Formato de exportação">
+    <option value="png" selected>PNG</option>
+    <option value="jpeg">JPG</option>
+  </select>
+  <span class="sep"></span>
+  <button id="btnUndo" title="Desfazer (Ctrl+Z)">↩ Desfazer</button>
+  <button id="btnRedo" title="Refazer (Ctrl+Y)">↪ Refazer</button>
+ <span class="sep"></span>
+   <button id="btnZoomOut" title="Zoom −">🔍 −</button>
+   <button id="btnZoomIn" title="Zoom +">🔍 +</button>
+   <button id="btnZoomFit" title="Ajustar à tela">⤢</button>
+   <span id="zoomPct" class="zoom-pct">100%</span>
+   <span class="spacer"></span>
+   <button id="btnBatchEnhance" title="Aplicar correção ideal em todas as selecionadas">🎯 Corrigir todas</button>
+   <button id="btnAnalyze" class="accent" title="JARVIS analisa a foto e sugere o ideal">✨ Analisar com JARVIS</button>
+   <button id="btnAbout" title="Sobre">ℹ️</button>
+</header>
+
+<main>
+  <section class="stage" id="stage">
+    <canvas id="stageCanvas"></canvas>
+    <div id="cropOverlay" class="crop-overlay hidden">
+      <div id="shadeTop" class="crop-shade"></div>
+      <div id="shadeBottom" class="crop-shade"></div>
+      <div id="shadeLeft" class="crop-shade"></div>
+      <div id="shadeRight" class="crop-shade"></div>
+      <div id="cropBox" class="crop-box">
+        <span class="crop-handle h-nw" data-h="nw"></span>
+        <span class="crop-handle h-ne" data-h="ne"></span>
+        <span class="crop-handle h-sw" data-h="sw"></span>
+        <span class="crop-handle h-se" data-h="se"></span>
+        <span class="crop-size" id="cropSize">0 × 0</span>
+      </div>
+      <div class="crop-bar">
+        <button data-ratio="free" class="active">Livre</button>
+        <button data-ratio="1:1">1:1</button>
+        <button data-ratio="4:5">4:5</button>
+        <button data-ratio="16:9">16:9</button>
+        <button data-ratio="3:2">3:2</button>
+        <span class="sep"></span>
+        <button id="cropCancel">Cancelar</button>
+        <button id="cropApply" class="accent">✂️ Aplicar corte</button>
+      </div>
+    </div>
+    <div class="empty" id="emptyHint">
+      <img class="empty-logo" src="assets/logo.png" alt="JARVIS Studio">
+      <div>Abra uma ou mais fotos para o <b>JARVIS</b> analisar, corrigir e preparar sua postagem.</div>
+    </div>
+    <input type="file" id="fileInput" accept="image/*" multiple hidden>
+  </section>
+
+  <aside class="panel">
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-tab="adjust">Ajustes</button>
+      <button class="tab" data-tab="filters">Filtros</button>
+      <button class="tab" data-tab="blend">Mesclagem</button>
+      <button class="tab" data-tab="assistant">Assistente</button>
+      <button class="tab" data-tab="sign">Assinatura</button>
+    </nav>
+
+    <!-- AJUSTES -->
+    <section class="tabpage active" id="tab-adjust">
+      <div class="row-buttons">
+        <button id="btnCrop" class="accent" title="Recortar a imagem com seleção arrastável">✂️ Cortar</button>
+        <button id="btnCropReset" class="ghost" title="Restaurar ao original">↩ Original</button>
+      </div>
+      <div class="slider-row"><label>Brilho</label><input type="range" id="s-brightness" min="-100" max="100" value="0"><span id="v-brightness">0</span></div>
+      <div class="slider-row"><label>Contraste</label><input type="range" id="s-contrast" min="-100" max="100" value="0"><span id="v-contrast">0</span></div>
+      <div class="slider-row"><label>Saturação</label><input type="range" id="s-saturation" min="-100" max="100" value="0"><span id="v-saturation">0</span></div>
+      <div class="slider-row"><label>Nitidez</label><input type="range" id="s-sharpness" min="-100" max="100" value="0"><span id="v-sharpness">0</span></div>
+      <div class="slider-row"><label>Temperatura</label><input type="range" id="s-temperature" min="-100" max="100" value="0"><span id="v-temperature">0</span></div>
+      <div class="row-buttons">
+        <button id="btnApplyAdjust">Aplicar</button>
+        <button id="btnResetAdjust" class="ghost">Reset</button>
+      </div>
+      <p class="hint">Os sliders dão preview ao vivo. "Aplicar" grava no histórico.</p>
+    </section>
+
+    <!-- FILTROS -->
+    <section class="tabpage hidden" id="tab-filters">
+      <div class="grid" id="filterGrid"></div>
+    </section>
+
+    <!-- MESCLAGEM -->
+    <section class="tabpage hidden" id="tab-blend">
+      <label>Modo de mesclagem</label>
+      <select id="blendMode">
+        <option value="overlay" selected>Overlay</option>
+        <option value="multiply">Multiply</option>
+        <option value="screen">Screen</option>
+        <option value="soft-light">Soft Light</option>
+        <option value="hard-light">Hard Light</option>
+        <option value="darken">Darken</option>
+        <option value="lighten">Lighten</option>
+        <option value="difference">Difference</option>
+        <option value="exclusion">Exclusion</option>
+        <option value="color-dodge">Color Dodge</option>
+        <option value="color-burn">Color Burn</option>
+        <option value="hue">Hue</option>
+        <option value="saturation">Saturation</option>
+        <option value="color">Color</option>
+        <option value="luminosity">Luminosity</option>
+      </select>
+      <label>Camada superior (preparo)</label>
+      <select id="blendPrep">
+        <option value="original" selected>Original (mesma foto)</option>
+        <option value="grayscale">P&B</option>
+        <option value="blur">Desfoque (blur)</option>
+        <option value="sepia">Sépia</option>
+        <option value="sharpen">Nitidez</option>
+        <option value="hdr">HDR</option>
+        <option value="noir">Noir</option>
+        <option value="duotone">Duotone</option>
+        <option value="dreamy">Dreamy</option>
+        <option value="warm">Quente</option>
+        <option value="cool">Frio</option>
+      </select>
+      <div class="slider-row"><label>Opacidade</label><input type="range" id="blendOpacity" min="0" max="100" value="60"><span id="v-blendOpacity">60</span></div>
+      <button id="btnBlend">Mesclar</button>
+      <p class="hint">A camada superior é uma versão preparada da foto. Ex.: blur + screen = glow.</p>
+    </section>
+
+    <!-- ASSISTENTE -->
+    <section class="tabpage hidden" id="tab-assistant">
+      <div class="assistant-head">
+        <div class="jarv">🤖</div>
+        <div>
+          <h3>Análise JARVIS</h3>
+          <p class="hint">Diagnóstico técnico + sugestão de legenda e hashtags para sua postagem.</p>
+        </div>
+      </div>
+      <button id="btnAnalyzeTab">✨ Analisar foto</button>
+
+      <div id="diagnosis" class="diagnosis hidden"></div>
+
+       <div id="correctionBox" class="hidden">
+         <button id="btnAutoEnhance" class="accent">🎯 Aplicar correção ideal</button>
+       </div>
+
+       <div id="recommendationsBox" class="hidden"></div>
+
+       <hr>
+      <h4>Legendas</h4>
+       <label>Estilo</label>
+       <select id="captionStyle">
+         <option value="mix" selected>Misturado</option>
+         <option value="curto">Curto e direto</option>
+         <option value="engajador">Engajador (pergunta)</option>
+         <option value="poetico">Poético</option>
+         <option value="diario">Diário / momento</option>
+         <option value="story">Story</option>
+         <option value="reel">Reel</option>
+         <option value="profissional">Profissional</option>
+       </select>
+      <label>Local / contexto <small>(opcional)</small></label>
+      <input type="text" id="captionPlace" placeholder="ex.: praia, casa, viagem...">
+      <div class="row-buttons">
+        <button id="btnCaptions">💬 Gerar legendas</button>
+        <button id="btnAiCaption" title="Requer chave OpenAI (Assinatura → API)">✨ Com IA</button>
+      </div>
+      <div id="captions" class="captions hidden"></div>
+    </section>
+
+    <!-- ASSINATURA -->
+    <section class="tabpage hidden" id="tab-sign">
+      <h4>Assinatura nas fotos</h4>
+      <div class="check-row"><input type="checkbox" id="signEnabled" checked><label for="signEnabled">Aplicar assinatura</label></div>
+      <label>Texto</label>
+      <input type="text" id="signText" placeholder="@seuperfil">
+      <label>Fonte</label>
+      <select id="signFont">
+        <option value="Georgia" selected>Georgia (serifada)</option>
+        <option value="Arial">Arial (limpa)</option>
+        <option value="Consolas">Consolas (mono)</option>
+        <option value="'Brush Script MT'">Brush Script (manuscrita)</option>
+        <option value="Impact">Impact (forte)</option>
+      </select>
+      <div class="slider-row"><label>Tamanho</label><input type="range" id="signSize" min="12" max="200" value="42"><span id="v-signSize">42</span></div>
+      <div class="slider-row"><label>Opacidade</label><input type="range" id="signOpacity" min="5" max="100" value="85"><span id="v-signOpacity">85</span></div>
+      <label>Posição</label>
+      <select id="signPosition">
+        <option value="bottom-right" selected>Inferior direita</option>
+        <option value="bottom-left">Inferior esquerda</option>
+        <option value="top-right">Superior direita</option>
+        <option value="top-left">Superior esquerda</option>
+        <option value="bottom-center">Inferior centro</option>
+        <option value="center">Centro</option>
+      </select>
+      <label>Cor</label>
+      <div class="color-row"><input type="color" id="signColor" value="#ffffff"><span id="signColorHex">#ffffff</span></div>
+      <div class="check-row"><input type="checkbox" id="signShadow" checked><label for="signShadow">Sombra (legibilidade)</label></div>
+      <div class="row-buttons">
+        <button id="btnSignPreview">👁️ Ver assinatura</button>
+        <button id="btnSignSave">💾 Salvar padrão</button>
+      </div>
+      <p class="hint">A assinatura é aplicada na exportação (e no preview). O padrão fica salvo no navegador.</p>
+
+      <hr>
+      <h4>IA externa (opcional)</h4>
+      <label>Chave de API (OpenAI)</label>
+      <input type="password" id="signApiKey" placeholder="sk-..." autocomplete="off">
+      <label>Modelo</label>
+      <select id="signModel">
+        <option value="gpt-4o-mini" selected>gpt-4o-mini (rápido/barato)</option>
+        <option value="gpt-4o">gpt-4o (mais caprichado)</option>
+      </select>
+      <button id="btnApiSave" class="ghost">💾 Salvar chave</button>
+      <p class="hint">Opcional — só para legendas criativas geradas por LLM. Sem chave, o JARVIS gera legendas localmente (offline). A chave fica apenas no seu navegador.</p>
+    </section>
+  </aside>
+</main>
+
+<footer class="carousel">
+  <button id="btnAdd" title="Adicionar fotos">➕</button>
+  <button id="btnClose" title="Fechar atual">✕</button>
+  <div id="carouselStrip"></div>
+</footer>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="js/storage.js"></script>
+<script src="js/analyzer.js"></script>
+<script src="js/captions.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/editor.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
