@@ -494,7 +494,10 @@ main { flex: 1; display: flex; min-height: 0; }
     border-left: none;
     border-top: 1px solid var(--border);
   }
-  .tabs { position: sticky; top: 0; z-index: 5; background: var(--panel); overflow-x: auto; scrollbar-width: none; }
+  /* IMPORTANTE: overflow-x:auto computa overflow-y:auto e o flex container
+     colapsa a altura (1px) + clipe os botões. min-height + align-items:stretch
+     corrigem (botões de 40px = alvo de toque perfeito no mobile). */
+  .tabs { position: sticky; top: 0; z-index: 5; background: var(--panel); overflow-x: auto; align-items: stretch; min-height: 40px; scrollbar-width: none; }
   .tabs::-webkit-scrollbar { display: none; }
   .tab { flex: 1 0 auto; min-width: 76px; padding: 12px 8px; font-size: 12px; }
 
