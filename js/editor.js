@@ -121,7 +121,9 @@ const Editor = (() => {
     }
     if (sharpness !== 1) {
       const im = toImageData(out);
-      convolve(im, [0, -1, 0, -1, 5 + (sharpness - 1) * 3, -1, 0, -1, 0]);
+      // kernel soma 1: identidade + laplaciano*alpha → nitidifica SEM clarear (nível DC preservado)
+      const a = sharpness - 1;
+      convolve(im, [0, -a, 0, -a, 1 + 4 * a, -a, 0, -a, 0]);
       out = fromImageData(im);
     }
     if (temperature !== 0) {
@@ -438,7 +440,8 @@ const Editor = (() => {
       case 'blur': return withFilter(c, 'blur(3px)');
       case 'sharpen': {
         const im = toImageData(c);
-        convolve(im, [0, -1, 0, -1, 6, -1, 0, -1, 0]);
+        // kernel soma 1 (antes soma 2 clareava a imagem); nitidez com brilho preservado
+        convolve(im, [0, -1, 0, -1, 5, -1, 0, -1, 0]);
         return fromImageData(im);
       }
       case 'emboss': {
@@ -472,15 +475,19 @@ const Editor = (() => {
     }
   }
 
-  /** Saturação média 0..1 (usada pelo filtro auto sem análise prévia). */
+  /** Saturação média 0..1 (usada pelo filtro auto sem análise prévia). Amostrado como sharpnessOf. */
   function saturationOf(im) {
-    const d = im.data;
+    const d = im.data, w = im.width, h = im.height;
+    const step = Math.max(2, Math.floor(Math.sqrt((w * h) / 40000)));
     let sum = 0, n = 0;
-    for (let i = 0; i < d.length; i += 4) {
-      const r = d[i], g = d[i + 1], b = d[i + 2];
-      const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
-      sum += mx === 0 ? 0 : (mx - mn) / mx;
-      n++;
+    for (let y = 0; y < h; y += step) {
+      for (let x = 0; x < w; x += step) {
+        const i = (y * w + x) * 4;
+        const r = d[i], g = d[i + 1], b = d[i + 2];
+        const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+        sum += mx === 0 ? 0 : (mx - mn) / mx;
+        n++;
+      }
     }
     return n ? sum / n : 0.5;
   }
@@ -621,7 +628,7 @@ const Editor = (() => {
   function hdr(c) {
     const im = toImageData(c);
     equalize(im);
-    convolve(im, [0, -1, 0, -1, 5.5, -1, 0, -1, 0]);
+    convolve(im, [0, -1, 0, -1, 5, -1, 0, -1, 0]);
     return fromImageData(im);
   }
 
@@ -792,7 +799,7 @@ const Editor = (() => {
     clamp255, applyTemperature, duotone, posterize, solarize, equalize, noir,
     // motor profissional (puro, testável)
     percentile, buildToneLUT, applyLutLuminosity, grayWorldCast, applyCast,
-    sCurveLUT, sharpenLuminosity, histOf,
+    sCurveLUT, sharpenLuminosity, histOf, saturationOf,
     // recorte
     crop, cropData,
   };

@@ -272,7 +272,13 @@ const App = (() => {
     const canvas = $('stageCanvas');
     canvas.width = preview.width;
     canvas.height = preview.height;
-    canvas.getContext('2d').drawImage(preview, 0, 0);
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(preview, 0, 0);
+    // replica o render(): preview de assinatura não pode sumir durante o ajuste ao vivo
+    if (state.previewSignature) {
+      Editor.watermark(ctx, state.settings.signature, canvas.width, canvas.height);
+    }
     canvas.style.width = Math.max(1, Math.round(preview.width * state.zoom)) + 'px';
     canvas.style.height = Math.max(1, Math.round(preview.height * state.zoom)) + 'px';
   }
@@ -569,7 +575,8 @@ const App = (() => {
       card.className = 'rec-card';
       const icon = rec.type === 'filter' ? '🎨' : rec.type === 'adjust' ? '⚙️' : rec.type === 'compose' ? '📐' : rec.type === 'caption' ? '💬' : '📤';
       card.innerHTML = `<span class="rec-icon">${icon}</span><div><strong>${rec.label}</strong><small>${rec.reason}</small></div>`;
-      if (rec.action) {
+      // recomendações de filtro têm `filter` sem `action` — o botão aplica ambos
+      if (rec.filter || rec.action) {
         const btn = document.createElement('button');
         btn.textContent = 'Aplicar';
         btn.className = 'ghost';
@@ -603,9 +610,13 @@ const App = (() => {
     if (!target.length) { toast('Selecione fotos no carrossel (Ctrl+click)'); return; }
     if (!state.lastAnalysis) { toast('Analise uma foto primeiro para usar os mesmos ajustes'); return; }
     for (const doc of target) {
-      doc.current = Editor.autoEnhance(doc.current, state.lastAnalysis);
-      doc.history = [];
-      doc.historyIdx = -1;
+      const enhanced = Editor.autoEnhance(doc.current, state.lastAnalysis);
+      // mesmo modelo do commit(): preserva a base original no [0] e o undo/redo em cadeia
+      doc.history = doc.history.slice(0, doc.historyIdx + 1);
+      doc.history.push(Editor.clone(enhanced));
+      if (doc.history.length > 26) doc.history.shift();
+      doc.historyIdx = doc.history.length - 1;
+      doc.current = enhanced;
     }
     render();
     renderCarousel();

@@ -1,11 +1,13 @@
 /* Testes do Editor (motor de imagem) — node:test, sem DOM.
  *
- * Testa apenas as funções puras que operam sobre ImageData-like
- * sem necessidade de canvas: pixelMap, convolve, clamp255, luma.
+ * Testa as funções puras que operam sobre ImageData-like sem canvas:
+ * pixelMap, convolve, clamp255, luma, percentile, buildToneLUT,
+ * applyLutLuminosity, grayWorldCast, applyCast, sCurveLUT, histOf,
+ * equalize, sharpenLuminosity, saturationOf, cropData.
  *
  * Funções que dependem de canvas (applyTemperature, duotone,
- * posterize, solarize, noir, equalize) são testadas via
- * analyzer.test.js e captions.test.js que cobrem a lógica.
+ * posterize, solarize, noir, applyAdjust, autoEnhance) são
+ * validadas no navegador via Playwright (fluxo de UI).
  */
 'use strict';
 
@@ -162,10 +164,14 @@ test('Analyzer.analyze imagem vibrante tem mood vibrante', () => {
 });
 
 test('Analyzer.recommend inclui recomendação de filtro para mood vibrante', () => {
-  const a = Analyzer.analyze(solidImageData(8, 8, 220, 50, 50));
+  // (200, 100, 50): L ≈ 0.487 e sat = 0.75 → mood 'vibrante' (lição do AGENTS.md:
+  // (220,50,50) tem brightness ~0.39 → seria 'equilibrado' e o teste passaria por acidente)
+  const a = Analyzer.analyze(solidImageData(8, 8, 200, 100, 50));
+  assert.equal(a.mood, 'vibrante');
   const recs = Analyzer.recommend(a);
   const filterRec = recs.find(r => r.type === 'filter');
   assert.ok(filterRec, 'deveria ter recomendação de filtro');
+  assert.ok(filterRec.filter, 'recomendação de filtro deve expor o filtro');
 });
 
 test('Analyzer.recommend inclui recomendação de ajuste para foto escura', () => {
@@ -288,6 +294,140 @@ test('cropData preserva alpha e funciona com recorte parcial', () => {
   assert.equal(cut.data[0], 255);
   assert.equal(cut.data[4], 0);
   assert.equal(cut.data[3], 255); // alpha preservado
+});
+
+// ---- regressão: kernels de nitidez com soma 1 (não clareiam) ----
+
+test('kernel de nitidez do filtro sharpen (soma 1) preserva área uniforme', () => {
+  // regressão do bug: kernel [0,-1,0,-1,6,-1,0,-1,0] soma 2 → área 100 virava 200
+  const im = solidImageData(8, 8, 100, 100, 100);
+  Editor.convolve(im, [0, -1, 0, -1, 5, -1, 0, -1, 0]);
+  assert.equal(im.data[(3 * 8 + 3) * 4], 100, 'pixel interno deve permanecer 100');
+  assert.equal(im.data[(3 * 8 + 3) * 4 + 1], 100);
+  assert.equal(im.data[(3 * 8 + 3) * 4 + 2], 100);
+});
+
+test('kernel de nitidez do slider (soma 1) preserva área uniforme para qualquer força', () => {
+  for (const sharpness of [1.25, 1.5, 2]) {
+    const a = sharpness - 1;
+    const im = solidImageData(8, 8, 128, 128, 128);
+    Editor.convolve(im, [0, -a, 0, -a, 1 + 4 * a, -a, 0, -a, 0]);
+    assert.equal(im.data[(4 * 8 + 4) * 4], 128, `sharpness ${sharpness} clareou a imagem`);
+  }
+});
+
+test('kernel de nitidez realça borda sem inverter a transição', () => {
+  // imagem em degrau: lado esquerdo escuro (50), direito claro (150)
+  const w = 8, h = 8;
+  const data = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const v = x < 4 ? 50 : 150;
+      data[i] = v; data[i + 1] = v; data[i + 2] = v; data[i + 3] = 255;
+    }
+  }
+  const im = { width: w, height: h, data };
+  Editor.convolve(im, [0, -1, 0, -1, 5, -1, 0, -1, 0]);
+  const dark = im.data[(4 * 8 + 3) * 4];   // escuro ao lado da borda (x=3)
+  const light = im.data[(4 * 8 + 4) * 4];  // claro ao lado da borda (x=4)
+  assert.ok(dark < 50, `lado escuro deve escurecer mais: ${dark}`);
+  assert.ok(light > 150, `lado claro deve clarear mais: ${light}`);
+});
+
+// ---- equalize (pura) ----
+
+test('equalize de imagem uniforme mapeia para 255 (CDF = 100%)', () => {
+  const im = solidImageData(8, 8, 128, 128, 128);
+  Editor.equalize(im);
+  assert.equal(im.data[(4 * 8 + 4) * 4], 255);
+});
+
+test('equalize espalha tons de imagem escura para o range completo', () => {
+  const im = solidImageData(8, 8, 40, 40, 40);
+  Editor.equalize(im);
+  assert.equal(im.data[(4 * 8 + 4) * 4], 255, 'cor única (CDF 100%) deve ir a 255');
+});
+
+test('equalize com histograma espalhado aumenta contraste preservando ordem', () => {
+  // metade escura (20), metade clara (180) → CDF 50% em 180? não: 50% dos pixels são 20 → vira 128
+  const w = 8, h = 8;
+  const data = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const v = x < 4 ? 20 : 180;
+      data[i] = v; data[i + 1] = v; data[i + 2] = v; data[i + 3] = 255;
+    }
+  }
+  const im = { width: w, height: h, data };
+  Editor.equalize(im);
+  const dark = im.data[(4 * 8 + 2) * 4];
+  const light = im.data[(4 * 8 + 5) * 4];
+  assert.equal(dark, 128, 'primeira metade (50% CDF) → 128');
+  assert.equal(light, 255, 'segunda metade (100% CDF) → 255');
+});
+
+// ---- sharpenLuminosity (pura, máscara de luminosidade) ----
+
+test('sharpenLuminosity preserva área uniforme (sem halos)', () => {
+  const im = solidImageData(8, 8, 100, 100, 100);
+  Editor.sharpenLuminosity(im, 0.6);
+  assert.equal(im.data[(4 * 8 + 4) * 4], 100);
+});
+
+test('sharpenLuminosity aumenta contraste local em borda', () => {
+  const w = 8, h = 8;
+  const data = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const v = x < 4 ? 60 : 140;
+      data[i] = v; data[i + 1] = v; data[i + 2] = v; data[i + 3] = 255;
+    }
+  }
+  const im = { width: w, height: h, data };
+  const before = im.data[(4 * 8 + 3) * 4] - im.data[(4 * 8 + 4) * 4]; // negativo (60 - 140)
+  Editor.sharpenLuminosity(im, 1.0);
+  const dark = im.data[(4 * 8 + 3) * 4];
+  const light = im.data[(4 * 8 + 4) * 4];
+  assert.ok(dark < 60, `lado escuro deve escurecer: ${dark}`);
+  assert.ok(light > 140, `lado claro deve clarear: ${light}`);
+  assert.ok(dark - light < before, 'degrau acentuado');
+});
+
+// ---- saturationOf (agora amostrado e exportado) ----
+
+test('saturationOf: cinza = 0, vermelho puro = 1', () => {
+  const gray = solidImageData(16, 16, 128, 128, 128);
+  assert.equal(Editor.saturationOf(gray), 0);
+  const red = solidImageData(16, 16, 255, 0, 0);
+  assert.equal(Editor.saturationOf(red), 1);
+});
+
+test('saturationOf de imagem grande não varre todos os pixels (amostrado)', () => {
+  const im = solidImageData(600, 600, 200, 100, 50);
+  const sat = Editor.saturationOf(im);
+  // (200,100,50): sat = (200-50)/200 = 0.75
+  assert.ok(Math.abs(sat - 0.75) < 0.001, `sat = ${sat}`);
+});
+
+// ---- compositionBias (bug: sempre top-left) ----
+
+test('compositionBias detecta quadrante com mais detalhe (não é sempre top-left)', () => {
+  // imagem com detalhe APENAS no quadrante inferior-direito
+  const w = 12, h = 12;
+  const data = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const inBR = x >= 6 && y >= 6;
+      const v = inBR ? (x % 2 === 0 ? 255 : 0) : 128;
+      data[i] = v; data[i + 1] = v; data[i + 2] = v; data[i + 3] = 255;
+    }
+  }
+  const a = Analyzer.analyze({ width: w, height: h, data });
+  assert.equal(a.compositionBias, 'bottom-right');
 });
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }

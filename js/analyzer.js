@@ -91,11 +91,16 @@ const Analyzer = (() => {
           noiseCount++;
         }
 
-        // quadrante para composição
+        // quadrante para composição + detalhe local (regra dos terços)
         const qx = x < w / 2 ? 0 : 1;
         const qy = y < h / 2 ? 0 : 1;
         const qi = qy * 2 + qx;
         quadPixels[qi]++;
+        // magnitude do gradiente com o vizinho diagonal (amostrado) como medida de detalhe
+        if (x + step < w && y + step < h) {
+          const j = ((y + step) * w + (x + step)) * 4;
+          quadEdges[qi] += Math.abs(L - lum(d[j], d[j + 1], d[j + 2]));
+        }
       }
     }
 
@@ -139,8 +144,9 @@ const Analyzer = (() => {
     else if (saturation < 0.18 || brightness < 0.28) mood = 'sombrio';
     else if (saturation < 0.35) mood = 'suave';
 
-    // composição: qual quadrante tem mais detalhes (regra dos terços)
-    const maxQuad = quadEdges.indexOf(Math.max(...quadEdges));
+    // composição: quadrante com MAIS detalhe local por amostra (regra dos terços)
+    const detailPerQuad = quadPixels.map((p, i) => p > 0 ? quadEdges[i] / p : 0);
+    const maxQuad = detailPerQuad.indexOf(Math.max(...detailPerQuad));
     const compositionBias = ['top-left', 'top-right', 'bottom-left', 'bottom-right'][maxQuad];
 
     return {

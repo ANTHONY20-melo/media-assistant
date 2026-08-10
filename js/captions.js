@@ -155,7 +155,7 @@ const Captions = (() => {
         attempts++;
       } while (used.has(`${st}:${idx}`) && attempts < tpls.length);
       used.add(`${st}:${idx}`);
-      out.push(pick(tpls)(ctx));
+      out.push(tpls[idx](ctx));
     }
     return out;
   }
