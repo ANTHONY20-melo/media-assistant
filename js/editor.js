@@ -755,6 +755,195 @@ const Editor = (() => {
     return autoEnhance(c, analysis);
   }
 
+  /* ------------------------------------------------------------------ estilos automáticos (presets) */
+
+  /** Rótulos dos filtros (usados pelo styleLabel). */
+  const FILTER_LABELS = Object.fromEntries(FILTERS);
+
+  /**
+   * Aplica um "estilo" gravado (filtro/ajuste/mesclagem/correção/moldura) a um canvas.
+   * Recebe o snapshot serializado de uma operação anterior e reproduz em outra foto —
+   * é o motor do "aplicar último estilo às fotos novas".
+   */
+  function applyStyle(c, style) {
+    if (!style) return clone(c);
+    switch (style.type) {
+      case 'filter': return applyFilter(c, style.name);
+      case 'adjust': return applyAdjust(c, style.factors || {});
+      case 'blend': return blend(c, style.mode, style.prep, style.opacity);
+      case 'auto': return applyFilter(c, 'auto'); // correção ideal (histograma local)
+      case 'frame': return applyFrame(c, style.name);
+      default: return clone(c);
+    }
+  }
+
+  /** Descrição humana de um estilo (para a badge "Último estilo: ..."). Pura e testável. */
+  function styleLabel(style) {
+    if (!style) return null;
+    switch (style.type) {
+      case 'filter': return 'Filtro: ' + (FILTER_LABELS[style.name] || style.name);
+      case 'adjust': return 'Ajustes (brilho/contraste/saturação/nitidez)';
+      case 'blend': return 'Mesclagem: ' + (style.mode || '') + ' + ' + (style.prep || '');
+      case 'auto': return 'Correção ideal (JARVIS)';
+      case 'frame': return 'Moldura: ' + (FRAME_LABELS[style.name] || style.name);
+      default: return 'Estilo';
+    }
+  }
+
+  /* ------------------------------------------------------------------ molduras (frames) */
+
+  const FRAMES = [
+    ['none', 'Sem moldura'],
+    ['classic', 'Clássica'],
+    ['polaroid', 'Polaroid'],
+    ['film', 'Filme'],
+    ['double', 'Dupla'],
+    ['vintage', 'Vintage'],
+    ['neon', 'Neon'],
+    ['gradient', 'Gradiente'],
+    ['shadow', 'Sombra'],
+    ['rounded', 'Cantos'],
+  ];
+  const FRAME_LABELS = Object.fromEntries(FRAMES);
+
+  /**
+   * Geometria pura da moldura: tamanho do canvas final (W,H) e deslocamento da foto (ox,oy).
+   * Testável em Node sem canvas.
+   */
+  function frameLayout(w, h, type) {
+    switch (type) {
+      case 'classic': return { W: w + 32, H: h + 32, ox: 16, oy: 16 };
+      case 'polaroid': return { W: w + 48, H: h + 114, ox: 24, oy: 24 };
+      case 'film': return { W: w + 88, H: h + 88, ox: 44, oy: 44 };
+      case 'double': return { W: w + 52, H: h + 52, ox: 26, oy: 26 };
+      case 'vintage': return { W: w + 56, H: h + 56, ox: 28, oy: 28 };
+      case 'neon': return { W: w + 36, H: h + 36, ox: 18, oy: 18 };
+      case 'gradient': return { W: w + 40, H: h + 40, ox: 20, oy: 20 };
+      case 'shadow': return { W: w + 72, H: h + 72, ox: 30, oy: 30 };
+      case 'rounded': return { W: w + 16, H: h + 16, ox: 8, oy: 8 };
+      default: return { W: w, H: h, ox: 0, oy: 0 };
+    }
+  }
+
+  /**
+   * Aplica moldura ao canvas (usa drawImage/2D — não roda em Node; testar frameLayout).
+   * Cada tipo desenha a borda característica ao redor da foto.
+   */
+  function applyFrame(c, type) {
+    const { W, H, ox, oy } = frameLayout(c.width, c.height, type);
+    const n = document.createElement('canvas');
+    n.width = W;
+    n.height = H;
+    const ctx = n.getContext('2d');
+    const w = c.width, h = c.height;
+    const rounded = (x, y, rw, rh, r) => {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + rw, y, x + rw, y + rh, r);
+      ctx.arcTo(x + rw, y + rh, x, y + rh, r);
+      ctx.arcTo(x, y + rh, x, y, r);
+      ctx.arcTo(x, y, x + rw, y, r);
+      ctx.closePath();
+    };
+    switch (type) {
+      case 'none':
+        ctx.drawImage(c, 0, 0);
+        break;
+      case 'classic':
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, W, H);
+        ctx.drawImage(c, ox, oy);
+        ctx.strokeStyle = '#1B2637';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
+        break;
+      case 'polaroid': {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, W, H);
+        ctx.shadowColor = 'rgba(0,0,0,0.35)';
+        ctx.shadowBlur = 10;
+        ctx.fillRect(ox, oy, w, h);
+        ctx.shadowBlur = 0;
+        ctx.drawImage(c, ox, oy);
+        break;
+      }
+      case 'film': {
+        ctx.fillStyle = '#0B0F14';
+        ctx.fillRect(0, 0, W, H);
+        ctx.drawImage(c, ox, oy);
+        const holes = Math.max(4, Math.floor(W / 90));
+        const holeW = 30, holeH = 12;
+        const gap = (W - holes * holeW) / (holes + 1);
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        for (let i = 0; i < holes; i++) {
+          const x = gap + i * (holeW + gap);
+          ctx.fillRect(x, 12, holeW, holeH);
+          ctx.fillRect(x, H - 24, holeW, holeH);
+        }
+        break;
+      }
+      case 'double':
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, W, H);
+        ctx.drawImage(c, ox, oy);
+        ctx.strokeStyle = '#1B2637';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(ox - 12, oy - 12, w + 24, h + 24);
+        break;
+      case 'vintage':
+        ctx.fillStyle = '#F1E8D5';
+        ctx.fillRect(0, 0, W, H);
+        ctx.drawImage(c, ox, oy);
+        ctx.strokeStyle = '#9C8B6A';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(ox - 14, oy - 14, w + 28, h + 28);
+        break;
+      case 'neon':
+        ctx.fillStyle = '#0A0F18';
+        ctx.fillRect(0, 0, W, H);
+        ctx.shadowColor = '#00E5FF';
+        ctx.shadowBlur = 26;
+        ctx.strokeStyle = '#00E5FF';
+        ctx.lineWidth = 5;
+        ctx.strokeRect(ox - 3, oy - 3, w + 6, h + 6);
+        ctx.shadowBlur = 0;
+        ctx.drawImage(c, ox, oy);
+        break;
+      case 'gradient': {
+        const g = ctx.createLinearGradient(0, 0, W, H);
+        g.addColorStop(0, '#1B2637');
+        g.addColorStop(1, '#2D4A6E');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        ctx.fillRect(ox - 4, oy - 4, w + 8, h + 8);
+        ctx.drawImage(c, ox, oy);
+        break;
+      }
+      case 'shadow':
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, W, H);
+        ctx.shadowColor = 'rgba(0,0,0,0.30)';
+        ctx.shadowBlur = 18;
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(ox + 8, oy + 8, w, h);
+        ctx.shadowBlur = 0;
+        ctx.drawImage(c, ox, oy);
+        break;
+      case 'rounded': {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, W, H);
+        rounded(ox, oy, w, h, 22);
+        ctx.clip();
+        ctx.drawImage(c, ox, oy);
+        break;
+      }
+      default:
+        ctx.drawImage(c, ox, oy);
+    }
+    return n;
+  }
+
   /* ------------------------------------------------------------------ assinatura */
 
   /**
@@ -842,6 +1031,8 @@ const Editor = (() => {
     sCurveLUT, sharpenLuminosity, histOf, saturationOf,
     // recorte
     crop, cropData,
+    // estilos automáticos + molduras
+    applyStyle, styleLabel, FRAMES, FRAME_LABELS, frameLayout, applyFrame,
   };
 })();
 

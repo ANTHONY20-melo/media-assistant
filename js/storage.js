@@ -35,6 +35,8 @@ const Storage = (() => {
     },
     apiKey: '',
     model: 'gpt-4o-mini',
+    autoStyle: true,            // aplicar o último estilo às fotos novas
+    lastStyle: null,            // snapshot do último estilo aplicado {type, name|factors|mode|prep|opacity}
   };
 
   return {

@@ -11,23 +11,23 @@
 
 <header class="toolbar">
   <span class="brand"><img class="brand-logo" src="assets/logo.png" alt="Logo"> JARVIS Studio <small>assistente de mídia</small></span>
-  <button id="btnOpen" title="Abrir imagens">📂 Abrir</button>
-  <button id="btnExport" title="Exportar (Ctrl+S)">💾 Exportar</button>
+  <button id="btnOpen" title="Abrir imagens">📂 <span class="lbl">Abrir</span></button>
+  <button id="btnExport" title="Exportar (Ctrl+S)">💾 <span class="lbl">Exportar</span></button>
   <select id="exportFormat" title="Formato de exportação">
     <option value="png" selected>PNG</option>
     <option value="jpeg">JPG</option>
   </select>
   <span class="sep"></span>
-  <button id="btnUndo" title="Desfazer (Ctrl+Z)">↩ Desfazer</button>
-  <button id="btnRedo" title="Refazer (Ctrl+Y)">↪ Refazer</button>
+  <button id="btnUndo" title="Desfazer (Ctrl+Z)">↩ <span class="lbl">Desfazer</span></button>
+  <button id="btnRedo" title="Refazer (Ctrl+Y)">↪ <span class="lbl">Refazer</span></button>
  <span class="sep"></span>
    <button id="btnZoomOut" title="Zoom −">🔍 −</button>
    <button id="btnZoomIn" title="Zoom +">🔍 +</button>
    <button id="btnZoomFit" title="Ajustar à tela">⤢</button>
    <span id="zoomPct" class="zoom-pct">100%</span>
    <span class="spacer"></span>
-   <button id="btnBatchEnhance" title="Aplicar correção ideal em todas as selecionadas">🎯 Corrigir todas</button>
-   <button id="btnAnalyze" class="accent" title="JARVIS analisa a foto e sugere o ideal">✨ Analisar com JARVIS</button>
+   <button id="btnBatchEnhance" title="Aplicar correção ideal em todas as selecionadas">🎯 <span class="lbl">Corrigir todas</span></button>
+   <button id="btnAnalyze" class="accent" title="JARVIS analisa a foto e sugere o ideal">✨ <span class="lbl">Analisar com JARVIS</span></button>
    <button id="btnAbout" title="Sobre">ℹ️</button>
 </header>
 
@@ -69,12 +69,21 @@
       <button class="tab active" data-tab="adjust">Ajustes</button>
       <button class="tab" data-tab="filters">Filtros</button>
       <button class="tab" data-tab="blend">Mesclagem</button>
+      <button class="tab" data-tab="frames">Molduras</button>
       <button class="tab" data-tab="assistant">Assistente</button>
       <button class="tab" data-tab="sign">Assinatura</button>
     </nav>
 
     <!-- AJUSTES -->
     <section class="tabpage active" id="tab-adjust">
+      <div class="auto-style" id="autoStyleBox">
+        <label class="check-row"><input type="checkbox" id="autoStyleToggle" checked> <b>Estilo automático</b></label>
+        <p class="hint">Aplica o último estilo/filtro/moldura usado às fotos novas automaticamente.</p>
+        <div class="row-buttons">
+          <span class="style-badge" id="styleBadge">Nenhum estilo ainda</span>
+          <button id="btnClearStyle" class="ghost" title="Limpar o último estilo">✕</button>
+        </div>
+      </div>
       <div class="row-buttons">
         <button id="btnCrop" class="accent" title="Recortar a imagem com seleção arrastável">✂️ Cortar</button>
         <button id="btnCropReset" class="ghost" title="Restaurar ao original">↩ Original</button>
@@ -133,6 +142,12 @@
       <div class="slider-row"><label>Opacidade</label><input type="range" id="blendOpacity" min="0" max="100" value="60"><span id="v-blendOpacity">60</span></div>
       <button id="btnBlend">Mesclar</button>
       <p class="hint">A camada superior é uma versão preparada da foto. Ex.: blur + screen = glow.</p>
+    </section>
+
+    <!-- MOLDURAS -->
+    <section class="tabpage hidden" id="tab-frames">
+      <div class="grid frame-grid" id="frameGrid"></div>
+      <p class="hint">Clique numa moldura para aplicá-la à foto atual. A moldura é gravada como "último estilo" quando o Estilo automático está ativo.</p>
     </section>
 
     <!-- ASSISTENTE -->
@@ -248,7 +263,7 @@
 <footer class="carousel">
   <button id="btnAdd" title="Adicionar fotos">➕</button>
   <button id="btnClose" title="Fechar atual">✕</button>
-  <button id="btnBatchExport" title="Exportar todas (Ctrl+Shift+S)">📤 Exportar todas</button>
+  <button id="btnBatchExport" title="Exportar todas (Ctrl+Shift+S)">📤 <span class="lbl">Exportar todas</span></button>
   <div id="carouselStrip"></div>
 </footer>
 

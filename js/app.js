@@ -124,14 +124,23 @@ const App = (() => {
 
   function addDoc(img, name) {
     const original = Editor.fromImage(img);
+    let current = Editor.clone(original);
+    let styled = false;
+    // estilo automático: aplica o último estilo às fotos novas (mantém o original na base)
+    if (state.settings.autoStyle && state.settings.lastStyle) {
+      try {
+        current = Editor.applyStyle(original, state.settings.lastStyle);
+        styled = true;
+      } catch (_e) { /* estilo inválido/corrompido: usa o original */ }
+    }
     const id = 'doc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
     state.docs.push({
       id, name,
       original,
-      current: Editor.clone(original),
-      history: [Editor.clone(original)], // base original no índice 0
-      historyIdx: 0,
-      thumb: makeThumb(original),
+      current,
+      history: styled ? [Editor.clone(original), Editor.clone(current)] : [Editor.clone(original)], // base original no índice 0
+      historyIdx: styled ? 1 : 0,
+      thumb: makeThumb(current),
     });
   }
 
@@ -312,6 +321,7 @@ const App = (() => {
     const doc = currentDoc();
     if (!doc) return;
     commit(Editor.applyAdjust(doc.current, adjustFromSliders()));
+    setLastStyle({ type: 'adjust', factors: adjustFromSliders() });
     toast('Ajustes aplicados');
   }
 
@@ -339,10 +349,12 @@ const App = (() => {
     if (!doc) { toast('Abra uma foto primeiro'); return; }
     if (key === 'original') {
       commit(Editor.clone(doc.original));
+      setLastStyle(null);
       toast('Restaurado ao original');
       return;
     }
     commit(Editor.applyFilter(doc.current, key));
+    setLastStyle({ type: 'filter', name: key });
     toast(`Filtro: ${label}`);
   }
 
@@ -355,6 +367,7 @@ const App = (() => {
     const prep = $('blendPrep').value;
     const opacity = (+$('blendOpacity').value) / 100;
     commit(Editor.blend(doc.current, mode, prep, opacity));
+    setLastStyle({ type: 'blend', mode, prep, opacity });
     toast(`Mesclagem: ${mode} + ${prep}`);
   }
 
@@ -613,10 +626,10 @@ const App = (() => {
         btn.addEventListener('click', () => {
           if (rec.filter) {
             const doc = currentDoc();
-            if (doc) { commit(Editor.applyFilter(doc.current, rec.filter)); toast(`Filtro: ${rec.label}`); }
+            if (doc) { commit(Editor.applyFilter(doc.current, rec.filter)); setLastStyle({ type: 'filter', name: rec.filter }); toast(`Filtro: ${rec.label}`); }
           } else if (rec.action.brightness || rec.action.contrast || rec.action.saturation || rec.action.sharpness) {
             const doc = currentDoc();
-            if (doc) { commit(Editor.applyAdjust(doc.current, rec.action)); toast('Ajuste aplicado'); }
+            if (doc) { commit(Editor.applyAdjust(doc.current, rec.action)); setLastStyle({ type: 'adjust', factors: rec.action }); toast('Ajuste aplicado'); }
           }
         });
         card.appendChild(btn);
@@ -629,7 +642,62 @@ const App = (() => {
     const doc = currentDoc();
     if (!doc || !state.lastAnalysis) return;
     commit(Editor.autoEnhance(doc.current, state.lastAnalysis));
+    setLastStyle({ type: 'auto' });
     toast('Correção ideal aplicada pelo JARVIS 🎯');
+  }
+
+  /* ------------------------------------------------------------ estilo automático */
+
+  /** Grava o último estilo usado (para aplicar às fotos novas) e atualiza a badge. */
+  function setLastStyle(style) {
+    state.settings.lastStyle = style;
+    Storage.saveSettings(state.settings);
+    updateStyleBadge();
+  }
+
+  /** Atualiza a badge "Último estilo: ..." da aba Ajustes. */
+  function updateStyleBadge() {
+    const badge = $('styleBadge');
+    if (!badge) return;
+    const label = Editor.styleLabel(state.settings.lastStyle);
+    badge.textContent = label ? 'Último estilo: ' + label : 'Nenhum estilo ainda';
+    badge.classList.toggle('badge-empty', !label);
+  }
+
+  function clearLastStyle() {
+    state.settings.lastStyle = null;
+    Storage.saveSettings(state.settings);
+    updateStyleBadge();
+    toast('Estilo automático limpo');
+  }
+
+  /* ------------------------------------------------------------ molduras */
+
+  function buildFrameGrid() {
+    const grid = $('frameGrid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    for (const [key, label] of Editor.FRAMES) {
+      const b = document.createElement('button');
+      b.dataset.frame = key;
+      b.textContent = label;
+      b.addEventListener('click', () => applyFrameAction(key));
+      grid.appendChild(b);
+    }
+  }
+
+  function applyFrameAction(key) {
+    const doc = currentDoc();
+    if (!doc) { toast('Abra uma foto primeiro'); return; }
+    if (key === 'none') {
+      commit(Editor.clone(doc.current));
+      setLastStyle(null);
+      toast('Moldura removida');
+      return;
+    }
+    commit(Editor.applyFrame(doc.current, key));
+    setLastStyle({ type: 'frame', name: key });
+    toast(`Moldura: ${Editor.FRAME_LABELS[key]}`);
   }
 
   /* ------------------------------------------------------------ operações em lote */
@@ -653,6 +721,7 @@ const App = (() => {
     }
     render();
     renderCarousel();
+    setLastStyle({ type: 'auto' });
     toast(`Ajustes aplicados em ${target.length} foto(s)`);
   }
 
@@ -973,6 +1042,14 @@ const App = (() => {
     $('blendOpacity').addEventListener('input', () => $('v-blendOpacity').textContent = $('blendOpacity').value);
     $('btnBlend').addEventListener('click', doBlend);
 
+    // estilo automático
+    $('autoStyleToggle').addEventListener('change', (e) => {
+      state.settings.autoStyle = e.target.checked;
+      Storage.saveSettings(state.settings);
+      toast(e.target.checked ? 'Estilo automático ativado' : 'Estilo automático desativado');
+    });
+    $('btnClearStyle').addEventListener('click', clearLastStyle);
+
     $('btnAnalyze').addEventListener('click', analyzeCurrent);
     $('btnAnalyzeTab').addEventListener('click', analyzeCurrent);
     $('btnCaptions').addEventListener('click', generateCaptions);
@@ -1000,6 +1077,9 @@ const App = (() => {
   function init() {
     bindEvents();
     buildFilterGrid();
+    buildFrameGrid();
+    updateStyleBadge();
+    $('autoStyleToggle').checked = !!state.settings.autoStyle;
     render();
     renderCarousel();
     $('btnExport').disabled = true;

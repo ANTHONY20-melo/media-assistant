@@ -473,4 +473,70 @@ test('signatureImageRect: tamanho mínimo 10 e nunca ultrapassa canvas menor que
   assert.equal(r.h, 10); // clamp mínimo
 });
 
+// ---- molduras (frameLayout é pura; applyFrame é validado no navegador) ----
+
+test('frameLayout: none mantém dimensões e sem deslocamento', () => {
+  const r = Editor.frameLayout(400, 300, 'none');
+  assert.equal(r.W, 400);
+  assert.equal(r.H, 300);
+  assert.equal(r.ox, 0);
+  assert.equal(r.oy, 0);
+});
+
+test('frameLayout: classic adiciona 16px de borda em cada lado', () => {
+  const r = Editor.frameLayout(400, 300, 'classic');
+  assert.equal(r.W, 432);
+  assert.equal(r.H, 332);
+  assert.equal(r.ox, 16);
+  assert.equal(r.oy, 16);
+});
+
+test('frameLayout: polaroid tem mais área embaixo (foto + legenda)', () => {
+  const r = Editor.frameLayout(400, 300, 'polaroid');
+  assert.equal(r.W, 448);
+  assert.equal(r.H, 414); // 300 + 48 + 66 extra embaixo
+  assert.equal(r.ox, 24);
+  assert.equal(r.oy, 24);
+});
+
+test('frameLayout: sombra desloca a foto para cima/esquerda', () => {
+  const r = Editor.frameLayout(400, 300, 'shadow');
+  assert.equal(r.W, 472);
+  assert.equal(r.H, 372);
+  assert.equal(r.ox, 30);
+  assert.equal(r.oy, 30);
+});
+
+test('frameLayout: moldura desconhecida cai em none (zero-trust)', () => {
+  const r = Editor.frameLayout(100, 80, 'inexistente');
+  assert.equal(r.W, 100);
+  assert.equal(r.H, 80);
+  assert.equal(r.ox, 0);
+  assert.equal(r.oy, 0);
+});
+
+// ---- rótulos de estilo (styleLabel é pura e alimenta a badge da UI) ----
+
+test('styleLabel: filtro usa o nome amigável', () => {
+  assert.equal(Editor.styleLabel({ type: 'filter', name: 'vivid' }), 'Filtro: Vívido');
+  assert.equal(Editor.styleLabel({ type: 'filter', name: 'grayscale' }), 'Filtro: P&B');
+});
+
+test('styleLabel: filtro desconhecido cai no nome cru (zero-trust)', () => {
+  assert.equal(Editor.styleLabel({ type: 'filter', name: 'foo' }), 'Filtro: foo');
+});
+
+test('styleLabel: ajustes, mesclagem, correção ideal e moldura', () => {
+  assert.equal(Editor.styleLabel({ type: 'adjust', factors: {} }), 'Ajustes (brilho/contraste/saturação/nitidez)');
+  assert.equal(Editor.styleLabel({ type: 'blend', mode: 'screen', prep: 'blur' }), 'Mesclagem: screen + blur');
+  assert.equal(Editor.styleLabel({ type: 'auto' }), 'Correção ideal (JARVIS)');
+  assert.equal(Editor.styleLabel({ type: 'frame', name: 'polaroid' }), 'Moldura: Polaroid');
+});
+
+test('styleLabel: null/estilo inválido retorna null (badge vazia)', () => {
+  assert.equal(Editor.styleLabel(null), null);
+  assert.equal(Editor.styleLabel(undefined), null);
+  assert.equal(Editor.styleLabel({}), 'Estilo');
+});
+
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
