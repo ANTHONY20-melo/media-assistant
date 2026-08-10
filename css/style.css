@@ -238,8 +238,11 @@ main { flex: 1; display: flex; min-height: 0; }
 #btnClearStyle { flex: 0 0 auto; min-width: 36px; }
 
 /* ---------- molduras ---------- */
-.frame-grid { grid-template-columns: repeat(3, 1fr); }
-.frame-grid button { font-size: 12px; padding: 10px 4px; }
+.frame-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
+.frame-grid .frame-category { font-size: 11px; font-weight: 700; color: var(--navy3); padding: 6px 4px 2px; }
+.frame-grid .frame-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.frame-grid button { font-size: 11px; padding: 8px 2px; min-height: 38px; }
+.frame-grid button.frame-multi::after { content: '🖼️'; font-size: 10px; }
 
 /* ---------- diagnóstico ---------- */
 .diagnosis { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }

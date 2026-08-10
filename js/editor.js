@@ -803,6 +803,21 @@ const Editor = (() => {
     ['gradient', 'Gradiente'],
     ['shadow', 'Sombra'],
     ['rounded', 'Cantos'],
+    // ---- molduras com recorte (shaped) ----
+    ['heart', 'Coração'],
+    ['circle', 'Círculo'],
+    ['oval', 'Oval'],
+    ['star', 'Estrela'],
+    ['hexagon', 'Hexágono'],
+    // ---- molduras multi-slot (colagem) ----
+    ['grid-2x2', 'Grade 2×2'],
+    ['grid-1x2', 'Grade 1×2'],
+    ['grid-2x1', 'Grade 2×1'],
+    ['diptych', 'Díptico'],
+    ['triptych', 'Tríptico'],
+    ['collage-3', 'Colagem 3'],
+    ['collage-4', 'Colagem 4'],
+    ['collage-5', 'Colagem 5'],
   ];
   const FRAME_LABELS = Object.fromEntries(FRAMES);
 
@@ -821,8 +836,156 @@ const Editor = (() => {
       case 'gradient': return { W: w + 40, H: h + 40, ox: 20, oy: 20 };
       case 'shadow': return { W: w + 72, H: h + 72, ox: 30, oy: 30 };
       case 'rounded': return { W: w + 16, H: h + 16, ox: 8, oy: 8 };
+      // shaped: canvas quadrado que comporta a forma
+      case 'heart':
+      case 'circle':
+      case 'oval':
+      case 'star':
+      case 'hexagon': {
+        const size = Math.max(w, h) + 40; // padding 20 cada lado
+        return { W: size, H: size, ox: (size - w) / 2, oy: (size - h) / 2 };
+      }
+      // multi-slot: grid com gap
+      case 'grid-2x2':
+      case 'grid-1x2':
+      case 'grid-2x1': {
+        const [cols, rows] = type.split('-')[1].split('x').map(Number);
+        const gap = 8, pad = 16;
+        const cellW = Math.floor(w / cols);
+        const cellH = Math.floor(h / rows);
+        const W = pad * 2 + cols * cellW + (cols - 1) * gap;
+        const H = pad * 2 + rows * cellH + (rows - 1) * gap;
+        return { W, H, ox: pad, oy: pad, cols, rows, cellW, cellH, gap };
+      }
+      case 'diptych': { // 2 vertical
+        const gap = 8, pad = 16;
+        const cellW = w, cellH = Math.floor(h / 2);
+        const W = pad * 2 + cellW;
+        const H = pad * 2 + 2 * cellH + gap;
+        return { W, H, ox: pad, oy: pad, cols: 1, rows: 2, cellW, cellH, gap };
+      }
+      case 'triptych': { // 3 horizontal
+        const gap = 8, pad = 16;
+        const cellW = Math.floor(w / 3), cellH = h;
+        const W = pad * 2 + 3 * cellW + 2 * gap;
+        const H = pad * 2 + cellH;
+        return { W, H, ox: pad, oy: pad, cols: 3, rows: 1, cellW, cellH, gap };
+      }
+      case 'collage-3': { // 1 grande + 2 pequenas
+        const gap = 8, pad = 16;
+        const bigW = Math.floor(w * 0.6), bigH = Math.floor(h * 0.6);
+        const smallW = Math.floor((w - bigW - gap) / 2);
+        const smallH = Math.floor((h - bigH - gap) / 2);
+        const W = pad * 2 + Math.max(bigW, smallW * 2 + gap);
+        const H = pad * 2 + Math.max(bigH, smallH * 2 + gap);
+        return { W, H, ox: pad, oy: pad, layout: 'collage-3', bigW, bigH, smallW, smallH, gap };
+      }
+      case 'collage-4': { // 2x2 igual
+        const gap = 8, pad = 16;
+        const cellW = Math.floor((w - gap) / 2);
+        const cellH = Math.floor((h - gap) / 2);
+        const W = pad * 2 + 2 * cellW + gap;
+        const H = pad * 2 + 2 * cellH + gap;
+        return { W, H, ox: pad, oy: pad, cols: 2, rows: 2, cellW, cellH, gap };
+      }
+      case 'collage-5': { // 1 grande + 4 pequenas
+        const gap = 8, pad = 16;
+        const bigW = Math.floor(w * 0.65), bigH = Math.floor(h * 0.65);
+        const smallW = Math.floor((w - bigW - gap) / 2);
+        const smallH = Math.floor((h - bigH - gap) / 2);
+        const W = pad * 2 + Math.max(bigW, smallW * 2 + gap);
+        const H = pad * 2 + Math.max(bigH, smallH * 2 + gap);
+        return { W, H, ox: pad, oy: pad, layout: 'collage-5', bigW, bigH, smallW, smallH, gap };
+      }
       default: return { W: w, H: h, ox: 0, oy: 0 };
     }
+  }
+
+  /**
+   * Constrói clipPath para formas shaped (pura, testável em Node - retorna array de comandos).
+   * Cada comando: {type: 'moveTo'|'lineTo'|'arcTo'|'arc'|'bezierCurveTo'|'closePath', args: [...]}
+   */
+  function buildClipPath(type, w, h) {
+    const cx = w / 2, cy = h / 2;
+    switch (type) {
+      case 'circle': return [
+        { type: 'arc', args: [cx, cy, Math.min(w, h) / 2, 0, Math.PI * 2] }
+      ];
+      case 'oval': return [
+        { type: 'ellipse', args: [cx, cy, w / 2, h / 2, 0, 0, Math.PI * 2] }
+      ];
+      case 'heart': {
+        const r = Math.min(w, h) / 2 * 0.9;
+        return [
+          { type: 'moveTo', args: [cx, cy + r * 0.3] },
+          { type: 'bezierCurveTo', args: [cx, cy - r * 0.2, cx - r, cy - r * 0.5, cx - r, cy - r * 0.8] },
+          { type: 'bezierCurveTo', args: [cx - r, cy - r * 1.2, cx - r * 0.5, cy - r * 1.5, cx, cy - r * 0.5] },
+          { type: 'bezierCurveTo', args: [cx + r * 0.5, cy - r * 1.5, cx + r, cy - r * 1.2, cx + r, cy - r * 0.8] },
+          { type: 'bezierCurveTo', args: [cx + r, cy - r * 0.5, cx, cy - r * 0.2, cx, cy + r * 0.3] }
+        ];
+      }
+      case 'star': {
+        const spikes = 5, outerR = Math.min(w, h) / 2 * 0.9, innerR = outerR * 0.45;
+        const cmds = [{ type: 'moveTo', args: [cx, cy - outerR] }];
+        for (let i = 1; i <= spikes * 2; i++) {
+          const angle = (i * Math.PI) / spikes - Math.PI / 2;
+          const r = i % 2 === 0 ? outerR : innerR;
+          cmds.push({ type: 'lineTo', args: [cx + Math.cos(angle) * r, cy + Math.sin(angle) * r] });
+        }
+        cmds.push({ type: 'closePath', args: [] });
+        return cmds;
+      }
+      case 'hexagon': {
+        const r = Math.min(w, h) / 2 * 0.9;
+        const cmds = [{ type: 'moveTo', args: [cx + r, cy] }];
+        for (let i = 1; i < 6; i++) {
+          const angle = (i * Math.PI * 2) / 6;
+          cmds.push({ type: 'lineTo', args: [cx + Math.cos(angle) * r, cy + Math.sin(angle) * r] });
+        }
+        cmds.push({ type: 'closePath', args: [] });
+        return cmds;
+      }
+      default: return [{ type: 'rect', args: [0, 0, w, h] }];
+    }
+  }
+
+  /**
+   * Geometria pura para frames multi-slot (retorna layout dos slots).
+   * Testável em Node - não usa canvas.
+   */
+  function frameLayoutMulti(w, h, type, slotCount = 1) {
+    const base = frameLayout(w, h, type);
+    if (!base.cols && !base.rows && !base.layout) return { slots: [] };
+
+    const pad = base.ox, gap = base.gap || 8;
+    const slots = [];
+
+    if (base.cols && base.rows) {
+      // grid regular
+      for (let r = 0; r < base.rows; r++) {
+        for (let c = 0; c < base.cols; c++) {
+          slots.push({
+            x: pad + c * (base.cellW + gap),
+            y: pad + r * (base.cellH + gap),
+            w: base.cellW,
+            h: base.cellH
+          });
+        }
+      }
+    } else if (base.layout === 'collage-3') {
+      // 1 grande no canto sup-esq + 2 pequenas ao lado/embaixo
+      slots.push({ x: pad, y: pad, w: base.bigW, h: base.bigH });
+      slots.push({ x: pad + base.bigW + gap, y: pad, w: base.smallW, h: base.smallH });
+      slots.push({ x: pad + base.bigW + gap, y: pad + base.smallH + gap, w: base.smallW, h: base.smallH });
+    } else if (base.layout === 'collage-5') {
+      // 1 grande + 4 pequenas (2x2 no lado direito)
+      slots.push({ x: pad, y: pad, w: base.bigW, h: base.bigH });
+      slots.push({ x: pad + base.bigW + gap, y: pad, w: base.smallW, h: base.smallH });
+      slots.push({ x: pad + base.bigW + gap, y: pad + base.smallH + gap, w: base.smallW, h: base.smallH });
+      slots.push({ x: pad, y: pad + base.bigH + gap, w: base.smallW, h: base.smallH });
+      slots.push({ x: pad + base.smallW + gap, y: pad + base.bigH + gap, w: base.smallW, h: base.smallH });
+    }
+    return { W: base.W, H: base.H, slots };
   }
 
   /**
@@ -846,6 +1009,46 @@ const Editor = (() => {
       ctx.closePath();
     };
     switch (type) {
+      // ---- molduras shaped (recortam a foto na forma) ----
+      case 'heart':
+      case 'circle':
+      case 'oval':
+      case 'star':
+      case 'hexagon': {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, W, H);
+        // clipPath centralizado
+        const cmds = buildClipPath(type, w, h);
+        ctx.save();
+        ctx.translate(ox, oy);
+        execClipPath(ctx, cmds);
+        ctx.clip();
+        // drawImage com preserveAspect crop
+        const scale = Math.min(w / w, h / h); // preenche o círculo
+        ctx.drawImage(c, 0, 0, w, h);
+        ctx.restore();
+        // borda decorativa
+        ctx.strokeStyle = '#1B2637';
+        ctx.lineWidth = 3;
+        ctx.translate(ox, oy);
+        execClipPath(ctx, cmds);
+        ctx.stroke();
+        ctx.translate(-ox, -oy);
+        break;
+      }
+      // ---- molduras multi-slot (colagem) ----
+      case 'grid-2x2':
+      case 'grid-1x2':
+      case 'grid-2x1':
+      case 'diptych':
+      case 'triptych':
+      case 'collage-3':
+      case 'collage-4':
+      case 'collage-5':
+        // delegate: caller must use applyFrameMulti with fotos dos slots
+        // se chamado direto (1 foto), replica a mesma foto em todos os slots
+        return applyFrameMulti(c, type);
+      // ---- molduras clássicas (bordas) ----
       case 'none':
         ctx.drawImage(c, 0, 0);
         break;
@@ -944,6 +1147,54 @@ const Editor = (() => {
     return n;
   }
 
+  /** Executa os comandos de clipPath no contexto (helper DOM). */
+  function execClipPath(ctx, cmds) {
+    ctx.beginPath();
+    for (const cmd of cmds) {
+      switch (cmd.type) {
+        case 'moveTo': ctx.moveTo(...cmd.args); break;
+        case 'lineTo': ctx.lineTo(...cmd.args); break;
+        case 'arc': ctx.arc(...cmd.args); break;
+        case 'ellipse': ctx.ellipse(...cmd.args); break;
+        case 'bezierCurveTo': ctx.bezierCurveTo(...cmd.args); break;
+        case 'rect': ctx.rect(...cmd.args); break;
+        case 'closePath': ctx.closePath(); break;
+      }
+    }
+  }
+
+  /**
+   * Aplica moldura multi-slot (colagem) — recebe a foto e replica em todos os slots,
+   * ou um array de fotos (uma por slot). Usa drawImage com preserveAspect em cada slot.
+   */
+  function applyFrameMulti(c, type, photos) {
+    const w = c.width, h = c.height;
+    const { W, H, slots } = frameLayoutMulti(w, h, type);
+    if (!slots.length) return clone(c);
+    const srcList = photos && photos.length ? photos : new Array(slots.length).fill(c);
+    const n = document.createElement('canvas');
+    n.width = W;
+    n.height = H;
+    const ctx = n.getContext('2d');
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, W, H);
+    slots.forEach((slot, i) => {
+      const src = srcList[i % srcList.length] || c;
+      // preserveAspect: preenche o slot mantendo proporção
+      const scale = Math.min(slot.w / src.width, slot.h / src.height, 1);
+      const dw = Math.round(src.width * scale);
+      const dh = Math.round(src.height * scale);
+      const dx = slot.x + Math.round((slot.w - dw) / 2);
+      const dy = slot.y + Math.round((slot.h - dh) / 2);
+      // borda do slot
+      ctx.strokeStyle = '#DDE3EB';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(slot.x + 0.5, slot.y + 0.5, slot.w - 1, slot.h - 1);
+      ctx.drawImage(src, dx, dy, dw, dh);
+    });
+    return n;
+  }
+
   /* ------------------------------------------------------------------ assinatura */
 
   /**
@@ -1031,8 +1282,9 @@ const Editor = (() => {
     sCurveLUT, sharpenLuminosity, histOf, saturationOf,
     // recorte
     crop, cropData,
-    // estilos automáticos + molduras
-    applyStyle, styleLabel, FRAMES, FRAME_LABELS, frameLayout, applyFrame,
+    // estilos automáticos + molduras (bordas, shaped, multi-slot)
+    applyStyle, styleLabel, FRAMES, FRAME_LABELS,
+    frameLayout, applyFrame, buildClipPath, frameLayoutMulti, applyFrameMulti, execClipPath,
   };
 })();
 

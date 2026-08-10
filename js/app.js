@@ -673,16 +673,37 @@ const App = (() => {
 
   /* ------------------------------------------------------------ molduras */
 
+  // categoriza as molduras para render no grid
+  const FRAME_CATEGORIES = [
+    { name: 'Bordas', keys: ['none', 'classic', 'polaroid', 'film', 'double', 'vintage', 'neon', 'gradient', 'shadow', 'rounded'] },
+    { name: 'Recortes (shaped)', keys: ['heart', 'circle', 'oval', 'star', 'hexagon'] },
+    { name: 'Colagens (multi)', keys: ['grid-2x2', 'grid-1x2', 'grid-2x1', 'diptych', 'triptych', 'collage-3', 'collage-4', 'collage-5'] },
+  ];
+  const SHAPE_KEYS = new Set(['heart', 'circle', 'oval', 'star', 'hexagon']);
+  const MULTI_KEYS = new Set(['grid-2x2', 'grid-1x2', 'grid-2x1', 'diptych', 'triptych', 'collage-3', 'collage-4', 'collage-5']);
+
   function buildFrameGrid() {
     const grid = $('frameGrid');
     if (!grid) return;
     grid.innerHTML = '';
-    for (const [key, label] of Editor.FRAMES) {
-      const b = document.createElement('button');
-      b.dataset.frame = key;
-      b.textContent = label;
-      b.addEventListener('click', () => applyFrameAction(key));
-      grid.appendChild(b);
+    grid.classList.add('category-grid');
+    for (const cat of FRAME_CATEGORIES) {
+      const header = document.createElement('div');
+      header.className = 'frame-category';
+      header.textContent = cat.name;
+      grid.appendChild(header);
+      const row = document.createElement('div');
+      row.className = 'frame-row';
+      for (const key of cat.keys) {
+        const b = document.createElement('button');
+        b.dataset.frame = key;
+        b.textContent = Editor.FRAME_LABELS[key];
+        b.title = Editor.FRAME_LABELS[key];
+        if (MULTI_KEYS.has(key)) b.classList.add('frame-multi');
+        b.addEventListener('click', () => applyFrameAction(key));
+        row.appendChild(b);
+      }
+      grid.appendChild(row);
     }
   }
 
@@ -695,6 +716,25 @@ const App = (() => {
       toast('Moldura removida');
       return;
     }
+    // multi-slot: usa as fotos selecionadas (ou replicam a atual)
+    if (MULTI_KEYS.has(key)) {
+      const sel = selectedDocs();
+      // sempre inclui a doc atual como primeira
+      const photos = sel.length > 0 ? sel.map(s => s.current) : [doc.current];
+      const result = Editor.applyFrameMulti(doc.current, key, photos);
+      commit(result);
+      toast(`Colagem: ${Editor.FRAME_LABELS[key]} (${photos.length} foto${photos.length > 1 ? 's' : ''})`);
+      return;
+    }
+    // shaped: recorta a foto na forma
+    if (SHAPE_KEYS.has(key)) {
+      const result = Editor.applyFrame(doc.current, key);
+      commit(result);
+      setLastStyle({ type: 'frame', name: key });
+      toast(`Moldura: ${Editor.FRAME_LABELS[key]}`);
+      return;
+    }
+    // bordas clássicas
     commit(Editor.applyFrame(doc.current, key));
     setLastStyle({ type: 'frame', name: key });
     toast(`Moldura: ${Editor.FRAME_LABELS[key]}`);

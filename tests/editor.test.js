@@ -515,6 +515,119 @@ test('frameLayout: moldura desconhecida cai em none (zero-trust)', () => {
   assert.equal(r.oy, 0);
 });
 
+// ---- molduras shaped (recortam na forma: coração, círculo, etc.) ----
+
+test('frameLayout: shaped (heart/circle/oval/star/hexagon) cria canvas quadrado com padding 20', () => {
+  for (const t of ['heart', 'circle', 'oval', 'star', 'hexagon']) {
+    const r = Editor.frameLayout(400, 300, t);
+    const size = Math.max(400, 300) + 40; // = 440
+    assert.equal(r.W, size);
+    assert.equal(r.H, size);
+    // foto centralizada: ox/oy = (size - w)/2
+    assert.equal(r.ox, (size - 400) / 2);
+    assert.equal(r.oy, (size - 300) / 2);
+  }
+});
+
+test('frameLayout: grid-2x2 divide em 4 células com gap e padding', () => {
+  const r = Editor.frameLayout(400, 300, 'grid-2x2');
+  const cols = 2, rows = 2, gap = 8, pad = 16;
+  const cellW = Math.floor(400 / cols); // 200
+  const cellH = Math.floor(300 / rows); // 150
+  assert.equal(r.W, pad * 2 + cols * cellW + (cols - 1) * gap);
+  assert.equal(r.H, pad * 2 + rows * cellH + (rows - 1) * gap);
+  assert.equal(r.cols, 2);
+  assert.equal(r.rows, 2);
+  assert.equal(r.cellW, cellW);
+  assert.equal(r.cellH, cellH);
+});
+
+test('frameLayout: diptych empilha 2 fotos verticalmente', () => {
+  const r = Editor.frameLayout(200, 300, 'diptych');
+  assert.equal(r.cols, 1);
+  assert.equal(r.rows, 2);
+  assert.equal(r.W, 16 * 2 + 200);
+});
+
+test('frameLayout: collage-3 layout (1 grande + 2 pequenas)', () => {
+  const r = Editor.frameLayout(600, 400, 'collage-3');
+  assert.ok(r.layout === 'collage-3');
+  assert.ok(r.bigW > 0 && r.bigH > 0);
+  assert.ok(r.smallW > 0 && r.smallH > 0);
+});
+
+test('frameLayoutMulti: grid-2x2 gera 4 slots posicionados', () => {
+  const { slots } = Editor.frameLayoutMulti(400, 300, 'grid-2x2');
+  assert.equal(slots.length, 4);
+  // slot 0 canto superior esquerdo
+  assert.equal(slots[0].x, 16);
+  assert.equal(slots[0].y, 16);
+  assert.equal(slots[0].w, 200);
+  assert.equal(slots[0].h, 150);
+  // slot 1 ao lado (mesma linha)
+  assert.equal(slots[1].x, 16 + 200 + 8);
+  assert.equal(slots[1].y, 16);
+});
+
+test('frameLayoutMulti: collage-3 gera 3 slots (1 grande + 2 pequenas)', () => {
+  const { slots } = Editor.frameLayoutMulti(600, 400, 'collage-3');
+  assert.equal(slots.length, 3);
+  // grande no topo-esquerdo
+  assert.equal(slots[0].x, 16);
+  assert.equal(slots[0].y, 16);
+  // pequenas à direita
+  assert.ok(slots[1].x > slots[0].x);
+  assert.ok(slots[2].y > slots[1].y);
+});
+
+test('frameLayoutMulti: collage-5 gera 5 slots', () => {
+  const { slots } = Editor.frameLayoutMulti(600, 400, 'collage-5');
+  assert.equal(slots.length, 5);
+});
+
+test('frameLayoutMulti: tipo desconhecido retorna slots vazios (zero-trust)', () => {
+  const { slots } = Editor.frameLayoutMulti(100, 100, 'nao-existe');
+  assert.equal(slots.length, 0);
+});
+
+// ---- clipPath (pura: retorna comandos para execClipPath) ----
+
+test('buildClipPath: circle gera arc completo', () => {
+  const cmds = Editor.buildClipPath('circle', 200, 200);
+  assert.equal(cmds.length, 1);
+  assert.equal(cmds[0].type, 'arc');
+  assert.equal(cmds[0].args[0], 100); // cx
+  assert.equal(cmds[0].args[1], 100); // cy
+  assert.equal(cmds[0].args[2], 100); // raio (min/2)
+});
+
+test('buildClipPath: heart gera comandos de curva (bezier)', () => {
+  const cmds = Editor.buildClipPath('heart', 200, 200);
+  assert.equal(cmds[0].type, 'moveTo');
+  assert.ok(cmds.some(c => c.type === 'bezierCurveTo')); // curvas de controle
+  assert.equal(cmds.length, 5); // moveTo + 2 bezier (lado esq) + 2 bezier (lado dir)
+});
+
+test('buildClipPath: star gera 5 pontas + closePath', () => {
+  const cmds = Editor.buildClipPath('star', 200, 200);
+  const lines = cmds.filter(c => c.type === 'lineTo').length;
+  assert.equal(lines, 10); // 5 pontas × 2 (outer + inner)
+  assert.ok(cmds.some(c => c.type === 'closePath'));
+});
+
+test('buildClipPath: tipo desconhecido gera rect (zero-trust)', () => {
+  const cmds = Editor.buildClipPath('foo', 100, 50);
+  assert.equal(cmds[0].type, 'rect');
+  assert.deepEqual(cmds[0].args, [0, 0, 100, 50]);
+});
+
+test('buildClipPath: hexagon gera 6 lados + closePath', () => {
+  const cmds = Editor.buildClipPath('hexagon', 200, 200);
+  assert.equal(cmds[0].type, 'moveTo');
+  assert.equal(cmds.filter(c => c.type === 'lineTo').length, 5);
+  assert.ok(cmds.some(c => c.type === 'closePath'));
+});
+
 // ---- rótulos de estilo (styleLabel é pura e alimenta a badge da UI) ----
 
 test('styleLabel: filtro usa o nome amigável', () => {
