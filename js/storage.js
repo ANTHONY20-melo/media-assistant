@@ -23,6 +23,7 @@ const Storage = (() => {
   const DEFAULT_SETTINGS = {
     signature: {
       enabled: true,
+      mode: 'text',           // 'text' | 'image'
       text: '@anthonymelo',
       font: 'Georgia',
       size: 42,
@@ -30,6 +31,7 @@ const Storage = (() => {
       position: 'bottom-right',
       color: '#ffffff',
       shadow: true,
+      image: null,            // dataURL PNG da assinatura (logo/assinatura digitalizada)
     },
     apiKey: '',
     model: 'gpt-4o-mini',

@@ -16,6 +16,7 @@ const App = (() => {
     lastAnalysis: null,
     lastRecommendations: null,
     previewSignature: false,
+    signImage: null, // HTMLImageElement da assinatura por imagem (quando mode='image')
     settings: Storage.loadSettings(),
   };
 
@@ -73,17 +74,37 @@ const App = (() => {
 
   /* ------------------------------------------------------------ documentos */
 
+  /* Documentos gigantes (ex.: 12MP do celular) esgotam a memória ao editar:
+   * reduz o maior lado para 4096px no carregamento (qualidade visual preservada). */
+  const MAX_DIM = 4096;
+
+  function downscaleIfNeeded(img) {
+    const w = img.naturalWidth || img.width || 0;
+    const h = img.naturalHeight || img.height || 0;
+    if (Math.max(w, h) <= MAX_DIM) return img;
+    const scale = MAX_DIM / Math.max(w, h);
+    const c = document.createElement('canvas');
+    c.width = Math.round(w * scale);
+    c.height = Math.round(h * scale);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return c;
+  }
+
   async function addFiles(fileList) {
     const files = [...fileList].filter(f => f.type.startsWith('image/'));
     if (!files.length) return;
+    let reduced = 0;
     for (const file of files) {
       try {
         const img = await loadImageFile(file);
-        addDoc(img, file.name.replace(/\.[^.]+$/, ''));
+        const out = downscaleIfNeeded(img);
+        if (out !== img) reduced++;
+        addDoc(out, file.name.replace(/\.[^.]+$/, ''));
       } catch (_e) {
         toast(`Não consegui abrir ${file.name}`);
       }
     }
+    if (reduced) toast(`${reduced} foto(s) gigante(s) reduzida(s) para 4096px`);
     if (state.docs.length) {
       renderCarousel();
       selectDoc(state.docs[state.docs.length - 1].id);
@@ -174,7 +195,11 @@ const App = (() => {
     // descarta o "refazer" e registra o novo estado (base original fica no [0])
     doc.history = doc.history.slice(0, doc.historyIdx + 1);
     doc.history.push(Editor.clone(canvas));
-    if (doc.history.length > 26) doc.history.shift();
+    if (doc.history.length > 26) {
+      doc.history.shift();
+      // o shift remove o [0] que era o ORIGINAL — restaura para o undo nunca perder a base
+      doc.history[0] = Editor.clone(doc.original);
+    }
     doc.historyIdx = doc.history.length - 1;
     doc.current = canvas;
     render();
@@ -218,7 +243,7 @@ const App = (() => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(doc.current, 0, 0);
     if (state.previewSignature) {
-      Editor.watermark(ctx, state.settings.signature, canvas.width, canvas.height);
+      Editor.watermark(ctx, state.settings.signature, canvas.width, canvas.height, state.signImage);
     }
     const z = state.zoom;
     canvas.style.width = Math.max(1, Math.round(canvas.width * z)) + 'px';
@@ -277,7 +302,7 @@ const App = (() => {
     ctx.drawImage(preview, 0, 0);
     // replica o render(): preview de assinatura não pode sumir durante o ajuste ao vivo
     if (state.previewSignature) {
-      Editor.watermark(ctx, state.settings.signature, canvas.width, canvas.height);
+      Editor.watermark(ctx, state.settings.signature, canvas.width, canvas.height, state.signImage);
     }
     canvas.style.width = Math.max(1, Math.round(preview.width * state.zoom)) + 'px';
     canvas.style.height = Math.max(1, Math.round(preview.height * state.zoom)) + 'px';
@@ -451,9 +476,11 @@ const App = (() => {
 
   let cropDrag = null; // { mode:'create'|'move'|'resize', sx, sy, ox, oy, ow, oh, handle }
 
-  function onCropMouseDown(e) {
+  // Pointer Events: cobrem mouse E touch no celular com o mesmo handler
+  function onCropPointerDown(e) {
     if (!state.crop) return;
     e.preventDefault();
+    e.stopPropagation();
     const p = imgFromEvent(e);
     const c = state.crop;
     const handle = e.target && e.target.dataset ? e.target.dataset.h : null;
@@ -464,8 +491,9 @@ const App = (() => {
     } else {
       cropDrag = { mode: 'create', sx: p.x, sy: p.y };
     }
-    window.addEventListener('mousemove', onCropMouseMove);
-    window.addEventListener('mouseup', onCropMouseUp);
+    window.addEventListener('pointermove', onCropPointerMove);
+    window.addEventListener('pointerup', onCropPointerUp);
+    window.addEventListener('pointercancel', onCropPointerUp);
   }
 
   function resizeFromHandle(d, p, W, H) {
@@ -479,8 +507,9 @@ const App = (() => {
     return { x, y, w, h };
   }
 
-  function onCropMouseMove(e) {
+  function onCropPointerMove(e) {
     if (!cropDrag) return;
+    e.preventDefault();
     const doc = currentDoc();
     const p = imgFromEvent(e);
     const W = doc.current.width, H = doc.current.height;
@@ -498,9 +527,10 @@ const App = (() => {
     positionCropOverlay();
   }
 
-  function onCropMouseUp() {
-    window.removeEventListener('mousemove', onCropMouseMove);
-    window.removeEventListener('mouseup', onCropMouseUp);
+  function onCropPointerUp() {
+    window.removeEventListener('pointermove', onCropPointerMove);
+    window.removeEventListener('pointerup', onCropPointerUp);
+    window.removeEventListener('pointercancel', onCropPointerUp);
     cropDrag = null;
   }
 
@@ -614,7 +644,10 @@ const App = (() => {
       // mesmo modelo do commit(): preserva a base original no [0] e o undo/redo em cadeia
       doc.history = doc.history.slice(0, doc.historyIdx + 1);
       doc.history.push(Editor.clone(enhanced));
-      if (doc.history.length > 26) doc.history.shift();
+      if (doc.history.length > 26) {
+        doc.history.shift();
+        doc.history[0] = Editor.clone(doc.original);
+      }
       doc.historyIdx = doc.history.length - 1;
       doc.current = enhanced;
     }
@@ -628,14 +661,21 @@ const App = (() => {
     if (!docs.length) { toast('Nenhuma foto para exportar'); return; }
     const format = $('exportFormat').value;
     const sig = state.settings.signature;
-    let count = 0;
+    let count = 0, failed = 0;
     for (const doc of docs) {
       Editor.exportCanvas(doc.current, format, format === 'jpeg' ? 0.92 : 1, sig, sig.enabled, (blob) => {
-        const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-        download(blob, `${doc.name}-jarvis-${stamp}.${format === 'jpeg' ? 'jpg' : 'png'}`);
-        count++;
-        if (count === docs.length) toast(`${count} foto(s) exportada(s)`);
-      });
+        if (!blob) {
+          failed++;
+          toast(`Falha ao exportar ${doc.name}`);
+        } else {
+          const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+          download(blob, `${doc.name}-jarvis-${stamp}.${format === 'jpeg' ? 'jpg' : 'png'}`);
+          count++;
+        }
+        if (count + failed === docs.length) {
+          toast(failed ? `${count} exportada(s), ${failed} falha(s)` : `${count} foto(s) exportada(s)`);
+        }
+      }, state.signImage);
     }
   }
 
@@ -708,10 +748,50 @@ const App = (() => {
 
   /* ------------------------------------------------------------ assinatura */
 
+  /** Lê um arquivo de imagem da assinatura, reduz para ≤300px e devolve dataURL. */
+  function readSignImage(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const max = 300;
+        const scale = Math.min(1, max / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round((img.naturalWidth || 0) * scale));
+        c.height = Math.max(1, Math.round((img.naturalHeight || 0) * scale));
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        resolve(c.toDataURL('image/png'));
+      };
+      img.onerror = reject;
+      img.src = url;
+    });
+  }
+
+  /** Cria o HTMLImageElement usado pelo watermark/preview a partir de um dataURL. */
+  function loadSignImage(dataURL) {
+    if (!dataURL) { state.signImage = null; return Promise.resolve(null); }
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => { state.signImage = img; resolve(img); };
+      img.onerror = () => { state.signImage = null; resolve(null); };
+      img.src = dataURL;
+    });
+  }
+
+  function toggleSignFields() {
+    const imageMode = document.querySelector('input[name="signMode"]:checked').value === 'image';
+    $('signTextFields').classList.toggle('hidden', imageMode);
+    $('signImageFields').classList.toggle('hidden', !imageMode);
+    $('signColorRow').classList.toggle('hidden', imageMode);
+    $('signShadowRow').classList.toggle('hidden', !imageMode);
+  }
+
   function bindSignatureInputs() {
     const from = () => {
       const sig = state.settings.signature;
       $('signEnabled').checked = sig.enabled;
+      $('signMode' + (sig.mode === 'image' ? 'Image' : 'Text')).checked = true;
       $('signText').value = sig.text;
       $('signFont').value = sig.font;
       $('signSize').value = sig.size;
@@ -724,9 +804,16 @@ const App = (() => {
       $('signShadow').checked = sig.shadow;
       $('signApiKey').value = state.settings.apiKey || '';
       $('signModel').value = state.settings.model || 'gpt-4o-mini';
+      toggleSignFields();
+      if (sig.image) {
+        loadSignImage(sig.image).then(showSignImagePreview);
+      } else {
+        hideSignImagePreview();
+      }
     };
     const to = () => ({
       enabled: $('signEnabled').checked,
+      mode: document.querySelector('input[name="signMode"]:checked').value,
       text: $('signText').value.trim(),
       font: $('signFont').value,
       size: Math.max(10, +$('signSize').value || 42),
@@ -734,6 +821,7 @@ const App = (() => {
       position: $('signPosition').value,
       color: $('signColor').value,
       shadow: $('signShadow').checked,
+      image: state.settings.signature.image || null,
     });
     const syncVals = () => {
       $('v-signSize').textContent = $('signSize').value;
@@ -750,6 +838,34 @@ const App = (() => {
       const el = $(id);
       if (el) el.addEventListener('input', () => { syncVals(); updateLive(); });
     });
+    document.querySelectorAll('input[name="signMode"]').forEach(r =>
+      r.addEventListener('change', () => { toggleSignFields(); updateLive(); }));
+
+    // upload da imagem da assinatura
+    $('btnSignImageUpload').addEventListener('click', () => $('signImageInput').click());
+    $('signImageInput').addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      try {
+        const dataURL = await readSignImage(file);
+        state.settings.signature.image = dataURL;
+        await loadSignImage(dataURL);
+        showSignImagePreview();
+        updateLive();
+        toast('Assinatura em imagem carregada ✓');
+      } catch (_err) {
+        toast('Não consegui ler essa imagem');
+      }
+    });
+    $('btnSignImageRemove').addEventListener('click', () => {
+      state.settings.signature.image = null;
+      state.signImage = null;
+      hideSignImagePreview();
+      updateLive();
+      toast('Assinatura em imagem removida');
+    });
+
     // Botão "Salvar padrão" persiste no localStorage
     $('btnSignSave').addEventListener('click', () => {
       Storage.saveSettings(state.settings);
@@ -769,6 +885,19 @@ const App = (() => {
     from();
   }
 
+  function showSignImagePreview() {
+    const p = $('signImagePreview');
+    p.classList.remove('hidden');
+    const img = $('signImagePreviewImg');
+    img.src = state.settings.signature.image || '';
+    img.alt = 'Assinatura (imagem)';
+  }
+
+  function hideSignImagePreview() {
+    $('signImagePreview').classList.add('hidden');
+    $('signImagePreviewImg').src = '';
+  }
+
   /* ------------------------------------------------------------ export */
 
   function exportCurrent() {
@@ -777,10 +906,11 @@ const App = (() => {
     const format = $('exportFormat').value;
     const sig = state.settings.signature;
     Editor.exportCanvas(doc.current, format, format === 'jpeg' ? 0.92 : 1, sig, sig.enabled, (blob) => {
+      if (!blob) { toast('Falha ao exportar'); return; }
       const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
       download(blob, `${doc.name}-jarvis-${stamp}.${format === 'jpeg' ? 'jpg' : 'png'}`);
       toast('Exportado com assinatura ✓');
-    });
+    }, state.signImage);
   }
 
   /* ------------------------------------------------------------ eventos */
@@ -818,7 +948,7 @@ const App = (() => {
     $('cropApply').addEventListener('click', applyCrop);
     document.querySelectorAll('.crop-bar [data-ratio]').forEach(b =>
       b.addEventListener('click', () => setCropRatio(b.dataset.ratio)));
-    $('cropOverlay').addEventListener('mousedown', onCropMouseDown);
+    $('cropOverlay').addEventListener('pointerdown', onCropPointerDown);
 
     $('btnAbout').addEventListener('click', () => {
       alert('🤖 JARVIS Studio — Assistente de Mídia\n\n' +

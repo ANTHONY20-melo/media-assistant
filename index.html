@@ -180,16 +180,37 @@
     <section class="tabpage hidden" id="tab-sign">
       <h4>Assinatura nas fotos</h4>
       <div class="check-row"><input type="checkbox" id="signEnabled" checked><label for="signEnabled">Aplicar assinatura</label></div>
-      <label>Texto</label>
-      <input type="text" id="signText" placeholder="@seuperfil">
-      <label>Fonte</label>
-      <select id="signFont">
-        <option value="Georgia" selected>Georgia (serifada)</option>
-        <option value="Arial">Arial (limpa)</option>
-        <option value="Consolas">Consolas (mono)</option>
-        <option value="'Brush Script MT'">Brush Script (manuscrita)</option>
-        <option value="Impact">Impact (forte)</option>
-      </select>
+      <div class="check-row sign-mode">
+        <label><input type="radio" name="signMode" id="signModeText" value="text" checked> Texto</label>
+        <label><input type="radio" name="signMode" id="signModeImage" value="image"> Imagem (logo/assinatura)</label>
+      </div>
+
+      <div id="signTextFields">
+        <label>Texto</label>
+        <input type="text" id="signText" placeholder="@seuperfil">
+        <label>Fonte</label>
+        <select id="signFont">
+          <option value="Georgia" selected>Georgia (serifada)</option>
+          <option value="Arial">Arial (limpa)</option>
+          <option value="Consolas">Consolas (mono)</option>
+          <option value="'Brush Script MT'">Brush Script (manuscrita)</option>
+          <option value="Impact">Impact (forte)</option>
+        </select>
+      </div>
+
+      <div id="signImageFields" class="hidden">
+        <label>Imagem da assinatura</label>
+        <div class="row-buttons">
+          <button id="btnSignImageUpload">🖼️ Escolher imagem</button>
+          <button id="btnSignImageRemove" class="ghost">Remover</button>
+        </div>
+        <input type="file" id="signImageInput" accept="image/*" hidden>
+        <div id="signImagePreview" class="sign-image-preview hidden">
+          <img id="signImagePreviewImg" alt="Assinatura (imagem)">
+        </div>
+        <p class="hint">Envie sua logo ou assinatura digitalizada em PNG com fundo transparente. Fica salva no navegador e é aplicada no preview e na exportação.</p>
+      </div>
+
       <div class="slider-row"><label>Tamanho</label><input type="range" id="signSize" min="12" max="200" value="42"><span id="v-signSize">42</span></div>
       <div class="slider-row"><label>Opacidade</label><input type="range" id="signOpacity" min="5" max="100" value="85"><span id="v-signOpacity">85</span></div>
       <label>Posição</label>
@@ -201,9 +222,8 @@
         <option value="bottom-center">Inferior centro</option>
         <option value="center">Centro</option>
       </select>
-      <label>Cor</label>
-      <div class="color-row"><input type="color" id="signColor" value="#ffffff"><span id="signColorHex">#ffffff</span></div>
-      <div class="check-row"><input type="checkbox" id="signShadow" checked><label for="signShadow">Sombra (legibilidade)</label></div>
+      <div id="signColorRow" class="color-row"><input type="color" id="signColor" value="#ffffff"><span id="signColorHex">#ffffff</span></div>
+      <div id="signShadowRow" class="check-row"><input type="checkbox" id="signShadow" checked><label for="signShadow">Sombra (legibilidade)</label></div>
       <div class="row-buttons">
         <button id="btnSignPreview">👁️ Ver assinatura</button>
         <button id="btnSignSave">💾 Salvar padrão</button>
@@ -228,6 +248,7 @@
 <footer class="carousel">
   <button id="btnAdd" title="Adicionar fotos">➕</button>
   <button id="btnClose" title="Fechar atual">✕</button>
+  <button id="btnBatchExport" title="Exportar todas (Ctrl+Shift+S)">📤 Exportar todas</button>
   <div id="carouselStrip"></div>
 </footer>
 

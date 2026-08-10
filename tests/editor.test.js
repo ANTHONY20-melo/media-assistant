@@ -430,4 +430,47 @@ test('compositionBias detecta quadrante com mais detalhe (não é sempre top-lef
   assert.equal(a.compositionBias, 'bottom-right');
 });
 
+// ---- signatureImageRect (assinatura por imagem, pura e exportada) ----
+
+test('signatureImageRect: imagem quadrada em bottom-right fica no canto com margem 24', () => {
+  const r = Editor.signatureImageRect(
+    { size: 42, position: 'bottom-right' }, 400, 300, 100, 100);
+  assert.equal(r.x, 400 - 24 - 42);
+  assert.equal(r.y, 300 - 24 - 42);
+  assert.equal(r.w, 42);
+  assert.equal(r.h, 42);
+});
+
+test('signatureImageRect: mantém proporção de imagem não quadrada', () => {
+  const r = Editor.signatureImageRect(
+    { size: 42, position: 'top-left' }, 800, 600, 200, 100);
+  // altura = size, largura proporcional 200/100 → 84
+  assert.equal(r.w, 84);
+  assert.equal(r.h, 42);
+  assert.equal(r.x, 24);
+  assert.equal(r.y, 24);
+});
+
+test('signatureImageRect: center centraliza na tela', () => {
+  const r = Editor.signatureImageRect(
+    { size: 42, position: 'center' }, 400, 300, 100, 100);
+  assert.equal(r.w, 42);
+  assert.equal(r.h, 42);
+  assert.equal(r.x, (400 - 42) / 2);
+  assert.equal(r.y, (300 - 42) / 2);
+});
+
+test('signatureImageRect: posição inválida cai no padrão (canto superior esquerdo, margem)', () => {
+  const r = Editor.signatureImageRect(
+    { size: 20, position: 'em-toda-parte' }, 100, 100, 50, 50);
+  assert.equal(r.x, 24);
+  assert.equal(r.y, 24);
+});
+
+test('signatureImageRect: tamanho mínimo 10 e nunca ultrapassa canvas menor que margem', () => {
+  const r = Editor.signatureImageRect(
+    { size: 4, position: 'top-left' }, 100, 100, 10, 10);
+  assert.equal(r.h, 10); // clamp mínimo
+});
+
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }

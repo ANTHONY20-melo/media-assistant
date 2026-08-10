@@ -757,8 +757,47 @@ const Editor = (() => {
 
   /* ------------------------------------------------------------------ assinatura */
 
-  function watermark(ctx, settings, w, h) {
-    if (!settings.enabled || !settings.text) return;
+  /**
+   * Retângulo puro da assinatura por IMAGEM (testável em Node).
+   * Altura = settings.size (px), largura proporcional; posição resolve dos presets.
+   */
+  function signatureImageRect(settings, canvasW, canvasH, imgW, imgH) {
+    const pad = 24;
+    const pos = settings.position || 'bottom-right';
+    const h = Math.max(10, Math.round(settings.size));
+    const w = h * (imgW / imgH);
+    const x = { 'top-left': pad, 'top-right': canvasW - pad - w, 'top-center': (canvasW - w) / 2,
+                'bottom-left': pad, 'bottom-right': canvasW - pad - w, 'bottom-center': (canvasW - w) / 2,
+                'center': (canvasW - w) / 2 };
+    const y = { 'top-left': pad, 'top-right': pad, 'top-center': pad,
+                'bottom-left': canvasH - pad - h, 'bottom-right': canvasH - pad - h, 'bottom-center': canvasH - pad - h,
+                'center': (canvasH - h) / 2 };
+    return { x: x[pos] ?? pad, y: y[pos] ?? pad, w, h };
+  }
+
+  function watermark(ctx, settings, w, h, imageEl) {
+    if (!settings.enabled) return;
+    const alpha = Math.max(0, Math.min(1, settings.opacity));
+
+    // modo IMAGEM: desenha a logo/assinatura PNG (mantém proporção)
+    if (settings.mode === 'image') {
+      if (!imageEl) return;
+      const iw = imageEl.naturalWidth || imageEl.width || 0;
+      const ih = imageEl.naturalHeight || imageEl.height || 0;
+      if (!iw || !ih) return;
+      const r = signatureImageRect(settings, w, h, iw, ih);
+      if (r.w <= 0 || r.h <= 0) return;
+      if (settings.shadow) { ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 8; }
+      ctx.globalAlpha = alpha;
+      ctx.drawImage(imageEl, r.x, r.y, r.w, r.h);
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = 'transparent';
+      return;
+    }
+
+    // modo TEXTO
+    if (!settings.text) return;
     const pad = 24;
     const size = Math.max(10, Math.round(settings.size));
     ctx.font = `${size}px ${settings.font}`;
@@ -772,7 +811,7 @@ const Editor = (() => {
                 'center': h / 2 };
     const pos = settings.position || 'bottom-right';
     if (settings.shadow) { ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 8; }
-    ctx.globalAlpha = Math.max(0, Math.min(1, settings.opacity));
+    ctx.globalAlpha = alpha;
     ctx.fillStyle = settings.color || '#ffffff';
     ctx.fillText(settings.text, x[pos] ?? pad, y[pos] ?? h - pad - size / 2);
     ctx.globalAlpha = 1;
@@ -782,13 +821,13 @@ const Editor = (() => {
 
   /* ------------------------------------------------------------------ export */
 
-  function exportCanvas(c, format, quality, settings, withWatermark, cb) {
+  function exportCanvas(c, format, quality, settings, withWatermark, cb, imageEl) {
     const n = document.createElement('canvas');
     n.width = c.width;
     n.height = c.height;
     const ctx = n.getContext('2d');
     ctx.drawImage(c, 0, 0);
-    if (withWatermark) watermark(ctx, settings, n.width, n.height);
+    if (withWatermark) watermark(ctx, settings, n.width, n.height, imageEl);
     n.toBlob((blob) => cb(blob), `image/${format}`, quality || 0.92);
   }
 
@@ -797,6 +836,7 @@ const Editor = (() => {
     applyAdjust, applyFilter, blend, autoEnhance,
     watermark, exportCanvas, FILTERS, BLEND_MODES, pixelMap, convolve, luma,
     clamp255, applyTemperature, duotone, posterize, solarize, equalize, noir,
+    signatureImageRect,
     // motor profissional (puro, testável)
     percentile, buildToneLUT, applyLutLuminosity, grayWorldCast, applyCast,
     sCurveLUT, sharpenLuminosity, histOf, saturationOf,

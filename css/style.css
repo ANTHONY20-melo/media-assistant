@@ -412,3 +412,73 @@ main { flex: 1; display: flex; min-height: 0; }
 .crop-bar button.active { background: #fff; color: var(--navy); font-weight: 700; }
 .crop-bar button.accent { background: #fff; color: var(--navy); font-weight: 700; }
 .crop-bar .sep { height: 20px; }
+
+/* ---------- assinatura por imagem ---------- */
+.sign-mode { gap: 14px; }
+.sign-mode label { display: flex; align-items: center; gap: 5px; margin: 0; cursor: pointer; }
+.sign-image-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg2);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  min-height: 60px;
+}
+.sign-image-preview img { max-height: 90px; max-width: 100%; object-fit: contain; }
+
+/* ---------- mobile (celular/tablet) ---------- */
+/* Em telas estreitas o app sai do "computador" (stage + painel lado a lado) e
+ * vira uma coluna: toolbar no topo, foto no meio, painel embaixo, carrossel no rodapé.
+ * Alvos de toque ≥ 40px para o dedo; crop-bar deslizável na horizontal. */
+@media (max-width: 900px) {
+  body { overflow: hidden; }
+
+  .toolbar {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px 8px;
+  }
+  .brand { font-size: 13px; margin-right: 4px; }
+  .brand-logo { width: 22px; height: 22px; }
+  .brand small { display: none; }
+  .toolbar button, .toolbar select { padding: 8px 10px; font-size: 13px; min-height: 38px; }
+  .sep { display: none; }
+  .spacer { display: none; }
+
+  main { flex-direction: column; }
+
+  .stage { flex: 1 1 46%; min-height: 0; }
+  .panel {
+    width: 100%;
+    flex: 1 1 54%;
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+  .tabs { position: sticky; top: 0; z-index: 5; background: var(--panel); }
+  .tab { padding: 12px 2px; font-size: 12px; }
+
+  .carousel { min-height: 84px; padding: 6px 8px; }
+  .car-item { width: 84px; }
+  .car-item img { height: 52px; }
+  #carouselStrip { flex: 1; }
+
+  .crop-bar {
+    top: 8px;
+    bottom: auto;
+    max-width: calc(100vw - 16px);
+    overflow-x: auto;
+    padding: 6px 8px;
+    justify-content: flex-start;
+  }
+  .crop-size { bottom: -22px; font-size: 10px; }
+
+  .toast { bottom: 96px; max-width: 90vw; width: max-content; }
+
+  .slider-row label { width: 72px; }
+  .hint { font-size: 11px; }
+  .tabpage input[type="text"], .tabpage select, .tabpage button { min-height: 40px; }
+  .grid button { padding: 10px 4px; }
+  .rec-card button, .caption-actions button { min-height: 32px; }
+}
