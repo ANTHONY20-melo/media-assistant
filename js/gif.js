@@ -206,6 +206,15 @@ const GIF = (() => {
 
   function u16le(v) { return [v & 0xff, (v >> 8) & 0xff]; }
 
+  /**
+   * Normaliza o delay do GIF (ms). Aceita 100..5000; qualquer valor fora
+   * (ou não numérico) volta ao default 600 — zero-trust no input da UI.
+   */
+  function normalizeDelay(value) {
+    const n = Number(value);
+    return Number.isFinite(n) && n >= 100 && n <= 5000 ? Math.round(n) : 600;
+  }
+
   function subBlocks(bytes) {
     const blocks = [];
     for (let i = 0; i < bytes.length; i += 255) {
@@ -265,7 +274,7 @@ const GIF = (() => {
     return Uint8Array.from(out);
   }
 
-  return { quantize, lzwEncode, encodeGIF };
+  return { quantize, lzwEncode, encodeGIF, normalizeDelay };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = GIF;

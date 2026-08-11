@@ -228,3 +228,21 @@ test('encodeGIF: roundtrip gradiente (2 frames, delay correto)', () => {
   assert.ok(g.frames[0].palette.length >= 2);
   assert.ok(g.frames[1].palette.length >= 2);
 });
+
+test('normalizeDelay: valores válidos passam (100..5000)', () => {
+  assert.strictEqual(GIF.normalizeDelay(600), 600);
+  assert.strictEqual(GIF.normalizeDelay(100), 100);
+  assert.strictEqual(GIF.normalizeDelay(5000), 5000);
+  assert.strictEqual(GIF.normalizeDelay(625), 625); // arredonda, não truncar
+  assert.strictEqual(GIF.normalizeDelay('1200'), 1200); // string numérica
+});
+
+test('normalizeDelay: inválidos caem no default 600 (zero-trust)', () => {
+  assert.strictEqual(GIF.normalizeDelay(50), 600);   // abaixo do mínimo
+  assert.strictEqual(GIF.normalizeDelay(9999), 600); // acima do máximo
+  assert.strictEqual(GIF.normalizeDelay('abc'), 600);
+  assert.strictEqual(GIF.normalizeDelay(null), 600);
+  assert.strictEqual(GIF.normalizeDelay(undefined), 600);
+  assert.strictEqual(GIF.normalizeDelay(NaN), 600);
+  assert.strictEqual(GIF.normalizeDelay(''), 600);
+});

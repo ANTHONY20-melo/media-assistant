@@ -317,6 +317,14 @@ const App = (() => {
         }
       });
       item.append(check, img, name);
+      // badge do melhor frame escolhido pelo JARVIS
+      if (doc.id === state.bestFrameId) {
+        const best = document.createElement('span');
+        best.className = 'car-best';
+        best.title = 'Melhor frame';
+        best.textContent = '🏆';
+        item.append(best);
+      }
       strip.appendChild(item);
     }
     const selCount = state.docs.filter(d => d._selected).length;
@@ -997,10 +1005,30 @@ const App = (() => {
       ctx.drawImage(doc.current, (w - dw) / 2, (h - dh) / 2, dw, dh);
       frames.push(Editor.toImageData(c));
     }
-    const bytes = GIF.encodeGIF(w, h, frames, 600);
+    const bytes = GIF.encodeGIF(w, h, frames, GIF.normalizeDelay($('gifDelay') ? $('gifDelay').value : 600));
     const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
     download(new Blob([bytes], { type: 'image/gif' }), `slideshow-jarvis-${stamp}.gif`);
-    toast(`GIF gerado com ${docs.length} fotos ✓`);
+    toast(`GIF gerado com ${docs.length} fotos ✓ (${GIF.normalizeDelay($('gifDelay') ? $('gifDelay').value : 600)}ms/foto)`);
+  }
+
+  /** Mostra o campo de delay do GIF só quando o formato selecionado é GIF. */
+  function syncGifDelayVisibility() {
+    const wrap = $('gifDelayWrap');
+    if (wrap) wrap.classList.toggle('hidden', $('exportFormat').value !== 'gif');
+  }
+
+  /**
+   * JARVIS escolhe o melhor frame do carrossel: analisa cada foto
+   * (Analyzer.analyze + diagnose) e marca a de maior score com badge 🏆.
+   */
+  function rankBestFrame() {
+    if (state.docs.length < 2) { toast('Adicione 2+ fotos para o JARVIS comparar'); return; }
+    const ranked = Analyzer.rankFrames(state.docs.map(d => Editor.toImageData(d.current)));
+    if (!ranked.length) { toast('Não foi possível avaliar as fotos'); return; }
+    const best = ranked[0];
+    state.bestFrameId = state.docs[best.index].id;
+    renderCarousel();
+    toast(`🏆 Melhor frame: ${state.docs[best.index].name} — nota ${best.score}`);
   }
 
   function exportAll() {
@@ -1332,6 +1360,8 @@ const App = (() => {
     });
     $('btnExport').addEventListener('click', exportCurrent);
     $('btnShare').addEventListener('click', shareCurrent);
+    $('exportFormat').addEventListener('change', syncGifDelayVisibility);
+    $('btnBestFrame').addEventListener('click', rankBestFrame);
     $('btnClose').addEventListener('click', () => currentDoc() && closeDoc(currentDoc().id));
     $('btnClearSel').addEventListener('click', () => {
       for (const d of state.docs) d._selected = false;
@@ -1425,6 +1455,7 @@ const App = (() => {
     buildFilterGrid();
     buildFrameGrid();
     buildPresetBar();
+    syncGifDelayVisibility();
     updateStyleBadge();
     $('autoStyleToggle').checked = !!state.settings.autoStyle;
     render();

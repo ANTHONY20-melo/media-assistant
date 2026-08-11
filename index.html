@@ -28,6 +28,9 @@
     <option value="webp">WEBP</option>
     <option value="gif">GIF animado</option>
   </select>
+  <label id="gifDelayWrap" class="gif-delay hidden" title="Velocidade do slideshow GIF (100 a 5000 ms por foto)">
+    <input id="gifDelay" type="number" min="100" max="5000" step="50" value="600">ms
+  </label>
   <span class="sep"></span>
   <button id="btnUndo" title="Desfazer (Ctrl+Z)">↩ <span class="lbl">Desfazer</span></button>
   <button id="btnRedo" title="Refazer (Ctrl+Y)">↪ <span class="lbl">Refazer</span></button>
@@ -288,6 +291,7 @@
   <button id="btnAdd" title="Adicionar fotos">➕</button>
   <button id="btnClose" title="Fechar atual">✕</button>
   <button id="btnClearSel" title="Limpar seleção" class="hidden">✕</button>
+  <button id="btnBestFrame" title="JARVIS escolhe a melhor foto do carrossel">🏆 <span class="lbl">Melhor frame</span></button>
   <button id="btnBatchExport" title="Exportar todas (Ctrl+Shift+S)">📤 <span class="lbl">Exportar todas</span></button>
   <div id="carouselStrip"></div>
 </footer>
