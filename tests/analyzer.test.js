@@ -14,6 +14,82 @@ function solid(w, h, [r, g, b]) {
   return { data, width: w, height: h };
 }
 
+/** Imagem cinza uniforme com listras de alto contraste apenas na região dada. */
+function detailRegion(w, h, rx, ry, rw, rh) {
+  const data = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      let v = 128;
+      if (x >= rx && x < rx + rw && y >= ry && y < ry + rh) {
+        v = (y % 2) ? 40 : 220; // listras horizontais: gradiente forte em y
+      }
+      data[i] = v; data[i + 1] = v; data[i + 2] = v; data[i + 3] = 255;
+    }
+  }
+  return { data, width: w, height: h };
+}
+
+/* ------------------------------------------------------- suggestCrop */
+
+test('suggestCrop: sujeito no canto inferior direito → terço (2,2)', () => {
+  const im = detailRegion(90, 60, 60, 40, 30, 20);
+  const c = Analyzer.suggestCrop(im);
+  assert.deepEqual(c, { x: 60, y: 40, w: 30, h: 20 });
+});
+
+test('suggestCrop: sujeito no canto superior esquerdo → terço (0,0)', () => {
+  const im = detailRegion(90, 60, 0, 0, 30, 20);
+  const c = Analyzer.suggestCrop(im);
+  assert.deepEqual(c, { x: 0, y: 0, w: 30, h: 20 });
+});
+
+test('suggestCrop: imagem uniforme → terço central', () => {
+  const c = Analyzer.suggestCrop(solid(90, 60, [128, 128, 128]));
+  assert.deepEqual(c, { x: 30, y: 20, w: 30, h: 20 });
+});
+
+test('suggestCrop: imagem pequena devolve a imagem inteira', () => {
+  const im = solid(8, 8, [10, 20, 30]);
+  assert.deepEqual(Analyzer.suggestCrop(im), { x: 0, y: 0, w: 8, h: 8 });
+});
+
+/* ------------------------------------------------------- rankFrames */
+
+test('rankFrames: foto nítida (listras) ranqueia acima da uniforme (desfocada)', () => {
+  const nitida = detailRegion(64, 48, 8, 8, 48, 32); // alto contraste
+  const chapada = solid(64, 48, [128, 128, 128]); // sem detalhe
+  const ranked = Analyzer.rankFrames([chapada, nitida]);
+  assert.equal(ranked[0].index, 1, 'nítida deve vir primeiro');
+  assert.ok(ranked[0].score > ranked[1].score);
+  assert.ok(ranked[0].score > 0 && ranked[0].score <= 100);
+});
+
+test('rankFrames: preserva índices originais e ordena decrescente', () => {
+  const frames = [
+    detailRegion(64, 48, 8, 8, 48, 32),
+    solid(64, 48, [128, 128, 128]),
+    detailRegion(64, 48, 20, 10, 30, 25),
+  ];
+  const ranked = Analyzer.rankFrames(frames);
+  assert.equal(ranked.length, 3);
+  assert.deepEqual(ranked.map(r => r.index).sort(), [0, 1, 2]);
+  for (let i = 1; i < ranked.length; i++) {
+    assert.ok(ranked[i - 1].score >= ranked[i].score, 'ordem decrescente');
+  }
+});
+
+test('rankFrames: lote vazio devolve array vazio', () => {
+  assert.deepEqual(Analyzer.rankFrames([]), []);
+});
+
+test('rankFrames: frames idênticos têm scores iguais', () => {
+  const a = detailRegion(64, 48, 8, 8, 48, 32);
+  const b = detailRegion(64, 48, 8, 8, 48, 32);
+  const ranked = Analyzer.rankFrames([a, b]);
+  assert.equal(ranked[0].score, ranked[1].score);
+});
+
 test('imagem clara tem brightness alto e contraste ~0', () => {
   const a = Analyzer.analyze(solid(32, 32, [200, 200, 200]));
   assert.ok(a.brightness > 0.7, `brightness ${a.brightness}`);

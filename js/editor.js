@@ -142,6 +142,36 @@ const Editor = (() => {
     return fromImageData(im);
   }
 
+  /* ------------------------------------------------------------ presets */
+
+  /**
+   * Presets de correção — combinações nomeadas de fatores (dados PUROS).
+   * Cada factors é compatível com applyAdjust: brightness/contrast/saturation
+   * em 0.1..3, temperature em -1..1. Aplicar um preset = aplicar applyAdjust
+   * com esses fatores (o histórico/estilo automático tratam como ajuste).
+   */
+  const PRESETS = [
+    { key: 'claro', label: 'Claro', factors: { brightness: 1.15, contrast: 1.05 } },
+    { key: 'contraste', label: 'Contraste', factors: { contrast: 1.3, brightness: 1.03 } },
+    { key: 'vivido', label: 'Vívido', factors: { saturation: 1.3, contrast: 1.12 } },
+    { key: 'quente', label: 'Quente', factors: { temperature: 0.35, brightness: 1.05 } },
+    { key: 'frio', label: 'Frio', factors: { temperature: -0.35 } },
+    { key: 'suave', label: 'Suave', factors: { contrast: 0.92, saturation: 0.95, sharpness: 1.1 } },
+  ];
+
+  /** Retorna os fatores de um preset (dados puros, testável em Node) ou null. */
+  function presetFactors(key) {
+    const p = PRESETS.find(x => x.key === key);
+    return p ? p.factors : null;
+  }
+
+  /** Aplica um preset ao canvas (DOM). Chave desconhecida → devolve o mesmo canvas. */
+  function applyPreset(c, key) {
+    const factors = presetFactors(key);
+    if (!factors) return c;
+    return applyAdjust(c, factors);
+  }
+
   /* ------------------------------------------------------------------ motor profissional (Photoshop-like) */
 
   /** Percentil do histograma (hist: array 256). Retorna valor 0..255. */
@@ -1301,6 +1331,8 @@ const Editor = (() => {
     watermark, exportCanvas, FILTERS, BLEND_MODES, pixelMap, convolve, luma,
     clamp255, applyTemperature, duotone, posterize, solarize, equalize, noir,
     signatureImageRect,
+    // presets de correção (dados puros testáveis em Node)
+    PRESETS, presetFactors, applyPreset,
     // motor profissional (puro, testável)
     percentile, buildToneLUT, applyLutLuminosity, grayWorldCast, applyCast,
     sCurveLUT, sharpenLuminosity, histOf, saturationOf, histToBars,

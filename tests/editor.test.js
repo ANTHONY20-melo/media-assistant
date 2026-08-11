@@ -706,3 +706,43 @@ test('histToBars: vazio devolve bins zerados; bins <= 0 vira 1', () => {
 });
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+/* ------------------------------------------------------------ presets */
+
+test('PRESETS: keys unicas, labels e fatores validos', () => {
+  const keys = Editor.PRESETS.map(p => p.key);
+  assert.equal(new Set(keys).size, keys.length, 'keys duplicadas');
+  assert.ok(keys.length >= 6, 'espera ao menos 6 presets');
+  for (const p of Editor.PRESETS) {
+    assert.ok(typeof p.label === 'string' && p.label.length > 0, 'label de ' + p.key);
+    assert.ok(p.factors && typeof p.factors === 'object', 'factors de ' + p.key);
+    for (const k of ['brightness', 'contrast', 'saturation', 'sharpness']) {
+      const v = p.factors[k];
+      if (v != null) assert.ok(v >= 0.1 && v <= 3, k + ' fora do range em ' + p.key);
+    }
+    const t = p.factors.temperature;
+    if (t != null) assert.ok(t >= -1 && t <= 1, 'temperature fora do range em ' + p.key);
+  }
+});
+
+test('PRESETS: nenhum preset e identico ao neutro (deve mudar algo)', () => {
+  for (const p of Editor.PRESETS) {
+    const f = p.factors;
+    const muda = ['brightness', 'contrast', 'saturation', 'sharpness'].some(k => f[k] != null && f[k] !== 1)
+      || (f.temperature != null && f.temperature !== 0);
+    assert.ok(muda, p.key + ' nao altera nada');
+  }
+});
+
+test('presetFactors: retorna fatores ou null', () => {
+  assert.deepEqual(Editor.presetFactors('claro'), { brightness: 1.15, contrast: 1.05 });
+  assert.equal(Editor.presetFactors('nao-existe'), null);
+  const vivido = Editor.presetFactors('vivido');
+  assert.equal(vivido.saturation, 1.3);
+  assert.equal(Editor.presetFactors('frio').temperature, -0.35);
+});
+
+test('applyPreset: chave desconhecida devolve o mesmo canvas (no-op)', () => {
+  const c = { width: 4, height: 4 };
+  assert.strictEqual(Editor.applyPreset(c, 'xyz'), c);
+});

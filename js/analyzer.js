@@ -402,7 +402,82 @@ const Analyzer = (() => {
     return parts.join(' ');
   }
 
-  return { analyze, diagnose, suggestAdjustments, describe, recommend, opinion, lum, percentile };
+  /* ------------------------------------------------------------ composição */
+
+  /**
+   * Sugere um corte automático pela REGRA DOS TERÇOS.
+   * Divide a imagem em grade 6×6, mede a saliência local (gradiente de
+   * luminância amostrado) e devolve o retângulo do TERÇO (3×3) que contém
+   * o sujeito — o novo enquadramento põe o ponto de interesse exatamente
+   * sobre uma das linhas/pontos fortes da composição.
+   *
+   * Imagem uniforme (sem saliência) → terço central (default).
+   * Imagem muito pequena (< 12px) → devolve a imagem inteira.
+   *
+   * @param {Object} im ImageData-like ({data, width, height})
+   * @returns {{x, y, w, h}} retângulo de corte
+   */
+  function suggestCrop(im) {
+    const w = im.width, h = im.height;
+    if (w < 12 || h < 12) return { x: 0, y: 0, w, h };
+    const d = im.data;
+    const G = 6; // grade de saliência interna (6×6 → terços bem resolvidos)
+    const sal = new Float64Array(G * G);
+    const cnt = new Float64Array(G * G);
+    const step = Math.max(1, Math.floor(Math.sqrt((w * h) / 200000)));
+
+    for (let y = step; y < h; y += step) {
+      for (let x = step; x < w; x += step) {
+        const i = (y * w + x) * 4;
+        const L = lum(d[i], d[i + 1], d[i + 2]);
+        let grad = 0;
+        if (x + step < w && y + step < h) {
+          const j = ((y + step) * w + (x + step)) * 4;
+          grad = Math.abs(L - lum(d[j], d[j + 1], d[j + 2]));
+        }
+        const cx = Math.min(G - 1, Math.floor(x * G / w));
+        const cy = Math.min(G - 1, Math.floor(y * G / h));
+        sal[cy * G + cx] += grad;
+        cnt[cy * G + cx]++;
+      }
+    }
+
+    let best = -1, bestVal = -1;
+    for (let i = 0; i < G * G; i++) {
+      const v = cnt[i] ? sal[i] / cnt[i] : 0;
+      if (v > bestVal) { bestVal = v; best = i; }
+    }
+    // sem saliência (imagem uniforme) → terço central (enquadramento default)
+    if (bestVal <= 0) {
+      return { x: Math.round(w / 3), y: Math.round(h / 3), w: Math.round(w / 3), h: Math.round(h / 3) };
+    }
+    const bx = best % G, by = Math.floor(best / G);
+    const tx = Math.min(2, Math.floor(bx * 3 / G));
+    const ty = Math.min(2, Math.floor(by * 3 / G));
+    return {
+      x: Math.round(tx * w / 3),
+      y: Math.round(ty * h / 3),
+      w: Math.round(w / 3),
+      h: Math.round(h / 3),
+    };
+  }
+
+  /**
+   * Ranqueia frames/fotos por qualidade (0..100) — para escolher o melhor
+   * frame de um lote (ex.: capa de slideshow). Ordena do melhor para o pior.
+   * @param {Array<{data, width, height}>} frames ImageData-like
+   * @returns {Array<{index, score, analysis}>}
+   */
+  function rankFrames(frames) {
+    return frames
+      .map((im, index) => {
+        const analysis = analyze(im);
+        return { index, score: diagnose(analysis).score, analysis };
+      })
+      .sort((a, b) => b.score - a.score);
+  }
+
+  return { analyze, diagnose, suggestAdjustments, describe, recommend, opinion, lum, percentile, suggestCrop, rankFrames };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = Analyzer;

@@ -373,6 +373,54 @@ const App = (() => {
     render();
   }
 
+  /* ------------------------------------------------------------ presets */
+
+  function setSlidersFromFactors(factors) {
+    const map = {
+      brightness: 's-brightness', contrast: 's-contrast', saturation: 's-saturation',
+      sharpness: 's-sharpness', temperature: 's-temperature',
+    };
+    const labelOf = id => 'v-' + id.replace('s-', '');
+    Object.keys(map).forEach(k => {
+      let v = factors[k] == null ? 0
+        : k === 'temperature' ? Math.round(factors[k] * 100)
+        : Math.round((factors[k] - 1) * 100);
+      v = Math.max(-100, Math.min(100, v));
+      $(map[k]).value = v;
+      $(labelOf(map[k])).textContent = String(v);
+    });
+  }
+
+  function applyPreset(key) {
+    const doc = currentDoc();
+    if (!doc) return toast('Abra uma foto primeiro');
+    const factors = Editor.presetFactors(key);
+    if (!factors) return;
+    setSlidersFromFactors(factors);
+    commit(Editor.applyPreset(doc.current, key));
+    setLastStyle({ type: 'adjust', factors });
+    toast('Preset "' + (Editor.PRESETS.find(p => p.key === key) || {}).label + '" aplicado');
+  }
+
+  function buildPresetBar() {
+    const bar = $('presetBar');
+    if (!bar) return;
+    bar.innerHTML = '';
+    const title = document.createElement('span');
+    title.className = 'preset-title';
+    title.textContent = 'Presets:';
+    bar.appendChild(title);
+    for (const p of Editor.PRESETS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'preset-btn';
+      b.textContent = p.label;
+      b.title = 'Aplicar ' + p.label;
+      b.addEventListener('click', () => applyPreset(p.key));
+      bar.appendChild(b);
+    }
+  }
+
   /* ------------------------------------------------------------ filtros */
 
   function buildFilterGrid() {
@@ -926,10 +974,40 @@ const App = (() => {
     toast(`Ajustes aplicados em ${target.length} foto(s)`);
   }
 
+  /**
+   * Exporta GIF animado (encoder próprio js/gif.js) usando as fotos do
+   * carrossel: selecionadas ou todas. Frames normalizados no canvas base do
+   * MAIOR tamanho (letterbox branco) — fotos de tamanhos diferentes cabem.
+   */
+  function exportGIF(docs) {
+    if (!docs.length) { toast('Nenhuma foto para exportar'); return; }
+    if (docs.length < 2) { toast('Adicione 2+ fotos para gerar um GIF animado'); return; }
+    const w = Math.max(...docs.map(d => d.current.width));
+    const h = Math.max(...docs.map(d => d.current.height));
+    const frames = [];
+    for (const doc of docs) {
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, w, h);
+      const fw = doc.current.width, fh = doc.current.height;
+      const scale = Math.min(w / fw, h / fh);
+      const dw = fw * scale, dh = fh * scale;
+      ctx.drawImage(doc.current, (w - dw) / 2, (h - dh) / 2, dw, dh);
+      frames.push(Editor.toImageData(c));
+    }
+    const bytes = GIF.encodeGIF(w, h, frames, 600);
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    download(new Blob([bytes], { type: 'image/gif' }), `slideshow-jarvis-${stamp}.gif`);
+    toast(`GIF gerado com ${docs.length} fotos ✓`);
+  }
+
   function exportAll() {
     const docs = selectedDocs().length > 0 ? selectedDocs() : state.docs;
     if (!docs.length) { toast('Nenhuma foto para exportar'); return; }
     const format = $('exportFormat').value;
+    if (format === 'gif') { exportGIF(docs); return; }
     const sig = state.settings.signature;
     let count = 0, failed = 0;
     for (const doc of docs) {
@@ -1178,6 +1256,12 @@ const App = (() => {
     const doc = currentDoc();
     if (!doc) { toast('Abra uma foto primeiro'); return; }
     const format = $('exportFormat').value;
+    // GIF animado: usa o carrossel (selecionadas ou todas) — uma foto só vira aviso
+    if (format === 'gif') {
+      const docs = selectedDocs().length > 0 ? selectedDocs() : state.docs;
+      exportGIF(docs);
+      return;
+    }
     const sig = state.settings.signature;
     Editor.exportCanvas(doc.current, format, quality(format), sig, sig.enabled, (blob) => {
       if (!blob) { toast('Falha ao exportar'); return; }
@@ -1194,6 +1278,12 @@ const App = (() => {
     const doc = currentDoc();
     if (!doc) { toast('Abra uma foto primeiro'); return; }
     const format = $('exportFormat').value;
+    // GIF animado: share/clipboard não fazem sentido → download direto
+    if (format === 'gif') {
+      const docs = selectedDocs().length > 0 ? selectedDocs() : state.docs;
+      exportGIF(docs);
+      return;
+    }
     const sig = state.settings.signature;
     const strategy = ShareKit.pickShareStrategy(navigator);
     Editor.exportCanvas(doc.current, format, quality(format), sig, sig.enabled, async (blob) => {
@@ -1334,6 +1424,7 @@ const App = (() => {
     bindEvents();
     buildFilterGrid();
     buildFrameGrid();
+    buildPresetBar();
     updateStyleBadge();
     $('autoStyleToggle').checked = !!state.settings.autoStyle;
     render();

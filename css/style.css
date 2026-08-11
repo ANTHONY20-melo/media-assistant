@@ -203,6 +203,20 @@ main { flex: 1; display: flex; min-height: 0; }
 .row-buttons { display: flex; gap: 8px; margin-top: 4px; }
 .row-buttons button { flex: 1; }
 
+/* ---------- presets de correção ---------- */
+.preset-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.preset-title { font-size: 11px; color: var(--fg2); align-self: center; margin-right: 2px; }
+.preset-btn {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--fg);
+  font-size: 11px;
+  padding: 5px 9px;
+  cursor: pointer;
+}
+.preset-btn:hover { border-color: var(--navy3); color: var(--accent); }
+
 .hint { font-size: 11px; color: var(--fg2); line-height: 1.45; }
 
 /* ---------- histograma de luminância ---------- */
