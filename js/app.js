@@ -19,6 +19,7 @@ const App = (() => {
     signImage: null, // HTMLImageElement da assinatura por imagem (quando mode='image')
     compare: false,       // overlay comparar antes/depois ativo
     comparePos: 0.5,      // posição do divisor (0..1)
+    bestFrameId: null,    // doc do melhor frame (🏆) escolhido pelo JARVIS (auto ou manual)
     settings: Storage.loadSettings(),
   };
 
@@ -113,6 +114,7 @@ const App = (() => {
     }
     if (reduced) toast(`${reduced} foto(s) gigante(s) reduzida(s) para 4096px`);
     if (state.docs.length) {
+      autoBestFrame(); // badge 🏆 automático: JARVIS marca o melhor frame do lote sem clique
       renderCarousel();
       selectDoc(state.docs[state.docs.length - 1].id);
       toast(`${state.docs.length} foto(s) no carrossel`);
@@ -187,6 +189,7 @@ const App = (() => {
       state.lastAnalysis = null;
       state.lastRecommendations = null;
     }
+    autoBestFrame(); // se o melhor saiu, o 🏆 vai para o próximo (ou some se < 2)
     render();
     renderCarousel();
     if (!state.docs.length) $('emptyHint').style.display = 'flex';
@@ -1021,14 +1024,26 @@ const App = (() => {
    * JARVIS escolhe o melhor frame do carrossel: analisa cada foto
    * (Analyzer.analyze + diagnose) e marca a de maior score com badge 🏆.
    */
+  function pickBestFrame() {
+    if (state.docs.length < 2) return null;
+    const ranked = Analyzer.rankFrames(state.docs.map(d => Editor.toImageData(d.current)));
+    return ranked.length ? ranked[0] : null;
+  }
+
   function rankBestFrame() {
     if (state.docs.length < 2) { toast('Adicione 2+ fotos para o JARVIS comparar'); return; }
-    const ranked = Analyzer.rankFrames(state.docs.map(d => Editor.toImageData(d.current)));
-    if (!ranked.length) { toast('Não foi possível avaliar as fotos'); return; }
-    const best = ranked[0];
+    const best = pickBestFrame();
+    if (!best) { toast('Não foi possível avaliar as fotos'); return; }
     state.bestFrameId = state.docs[best.index].id;
     renderCarousel();
     toast(`🏆 Melhor frame: ${state.docs[best.index].name} — nota ${best.score}`);
+  }
+
+  // 🏆 automático: marca o melhor frame ao adicionar/remover fotos, sem toast.
+  // Usa o mesmo motor do botão manual, mas em silêncio (o badge fala por si).
+  function autoBestFrame() {
+    const best = pickBestFrame();
+    state.bestFrameId = best ? state.docs[best.index].id : null;
   }
 
   function exportAll() {
