@@ -605,7 +605,27 @@ test('buildClipPath: heart gera comandos de curva (bezier)', () => {
   const cmds = Editor.buildClipPath('heart', 200, 200);
   assert.equal(cmds[0].type, 'moveTo');
   assert.ok(cmds.some(c => c.type === 'bezierCurveTo')); // curvas de controle
-  assert.equal(cmds.length, 5); // moveTo + 2 bezier (lado esq) + 2 bezier (lado dir)
+  assert.equal(cmds.length, 7); // moveTo + 6 bezier (curva canônica do MDN)
+});
+
+test('buildClipPath: heart cabe 100% no canvas (nunca corta)', () => {
+  // lição v2.6: o coração antigo usava r=min/2*0.9 e o topo em cy-1.5r caía NEGATIVO
+  // para foto paisagem (400×300 → topo -52.5) → era cortado no canvas = "coração estranho"
+  for (const [w, h] of [[400, 300], [300, 400], [200, 200], [500, 120]]) {
+    const cmds = Editor.buildClipPath('heart', w, h);
+    const pts = [];
+    for (const c of cmds) {
+      for (let i = 0; i < c.args.length; i += 2) pts.push([c.args[i], c.args[i + 1]]);
+    }
+    for (const [x, y] of pts) {
+      assert.ok(x >= 0 && x <= w, `x=${x} fora de [0,${w}] (${w}x${h})`);
+      assert.ok(y >= 0 && y <= h, `y=${y} fora de [0,${h}] (${w}x${h})`);
+    }
+    // o coração deve ocupar a área central (não pode ser minúsculo nem estourar)
+    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+    assert.ok(Math.max(...xs) - Math.min(...xs) >= w * 0.6, 'largura deve cobrir ≥60% do canvas');
+    assert.ok(Math.max(...ys) - Math.min(...ys) >= h * 0.6, 'altura deve cobrir ≥60% do canvas');
+  }
 });
 
 test('buildClipPath: star gera 5 pontas + closePath', () => {

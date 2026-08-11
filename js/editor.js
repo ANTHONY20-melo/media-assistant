@@ -915,13 +915,22 @@ const Editor = (() => {
         { type: 'ellipse', args: [cx, cy, w / 2, h / 2, 0, 0, Math.PI * 2] }
       ];
       case 'heart': {
-        const r = Math.min(w, h) / 2 * 0.9;
+        // Coração clássico (curva canônica do Canvas/MDN): moveTo(75,40) + 6 bezierCurveTo.
+        // Mapeado proporcionalmente para ocupar 84% de w×h com margens uniformes —
+        // a forma inteira SEMPRE cabe no canvas (o antigo usava r = min/2*0.9 e o topo
+        // em cy - 1.5r caía NEGATIVO para fotos paisagem → coração cortado/estranho).
+        const u = w * 0.84, v = h * 0.84;
+        const ox0 = (w - u) / 2, oy0 = (h - v) / 2;
+        const X = n => ox0 + ((n - 20) / 110) * u; // x canônico 20..130 (largura 110)
+        const Y = n => oy0 + ((n - 25) / 95) * v;  // y canônico 25..120 (altura 95)
         return [
-          { type: 'moveTo', args: [cx, cy + r * 0.3] },
-          { type: 'bezierCurveTo', args: [cx, cy - r * 0.2, cx - r, cy - r * 0.5, cx - r, cy - r * 0.8] },
-          { type: 'bezierCurveTo', args: [cx - r, cy - r * 1.2, cx - r * 0.5, cy - r * 1.5, cx, cy - r * 0.5] },
-          { type: 'bezierCurveTo', args: [cx + r * 0.5, cy - r * 1.5, cx + r, cy - r * 1.2, cx + r, cy - r * 0.8] },
-          { type: 'bezierCurveTo', args: [cx + r, cy - r * 0.5, cx, cy - r * 0.2, cx, cy + r * 0.3] }
+          { type: 'moveTo', args: [X(75), Y(40)] },
+          { type: 'bezierCurveTo', args: [X(75), Y(37), X(70), Y(25), X(50), Y(25)] },
+          { type: 'bezierCurveTo', args: [X(20), Y(25), X(20), Y(62.5), X(20), Y(62.5)] },
+          { type: 'bezierCurveTo', args: [X(20), Y(80), X(40), Y(102), X(75), Y(120)] },
+          { type: 'bezierCurveTo', args: [X(110), Y(102), X(130), Y(80), X(130), Y(62.5)] },
+          { type: 'bezierCurveTo', args: [X(130), Y(62.5), X(130), Y(25), X(100), Y(25)] },
+          { type: 'bezierCurveTo', args: [X(85), Y(25), X(75), Y(37), X(75), Y(40)] }
         ];
       }
       case 'star': {

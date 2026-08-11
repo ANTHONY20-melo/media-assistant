@@ -273,7 +273,17 @@ const App = (() => {
       const name = document.createElement('div');
       name.className = 'name';
       name.textContent = doc.name.length > 16 ? doc.name.slice(0, 14) + '…' : doc.name;
-      item.append(img, name);
+      // botão de seleção por toque (mobile NÃO tem Ctrl+click — antes era impossível
+      // escolher fotos distintas para colagem/multi no celular)
+      const check = document.createElement('button');
+      check.className = 'car-check' + (doc._selected ? ' check-on' : '');
+      check.type = 'button';
+      check.title = doc._selected ? 'Desselecionar' : 'Selecionar para colagem';
+      check.textContent = doc._selected ? '✓' : '';
+      check.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleSelectDoc(doc.id);
+      });
       item.addEventListener('click', (e) => {
         if (e.ctrlKey || e.metaKey) {
           toggleSelectDoc(doc.id);
@@ -281,7 +291,14 @@ const App = (() => {
           selectDoc(doc.id);
         }
       });
+      item.append(check, img, name);
       strip.appendChild(item);
+    }
+    const selCount = state.docs.filter(d => d._selected).length;
+    const clearBtn = $('btnClearSel');
+    if (clearBtn) {
+      clearBtn.classList.toggle('hidden', selCount === 0);
+      clearBtn.textContent = '✕ ' + (selCount ? selCount + ' sel.' : '');
     }
   }
 
@@ -719,7 +736,9 @@ const App = (() => {
     // multi-slot: usa as fotos selecionadas (ou replicam a atual)
     if (MULTI_KEYS.has(key)) {
       const sel = selectedDocs();
-      // sempre inclui a doc atual como primeira
+      if (!sel.length) {
+        toast(`Toque no ✓ das fotos para escolher (${Editor.FRAME_LABELS[key]}). Usando a foto atual.`);
+      }
       const photos = sel.length > 0 ? sel.map(s => s.current) : [doc.current];
       const result = Editor.applyFrameMulti(doc.current, key, photos);
       commit(result);
@@ -1033,6 +1052,10 @@ const App = (() => {
     });
     $('btnExport').addEventListener('click', exportCurrent);
     $('btnClose').addEventListener('click', () => currentDoc() && closeDoc(currentDoc().id));
+    $('btnClearSel').addEventListener('click', () => {
+      for (const d of state.docs) d._selected = false;
+      renderCarousel();
+    });
     $('btnUndo').addEventListener('click', undo);
     $('btnRedo').addEventListener('click', redo);
 
