@@ -989,6 +989,8 @@ const App = (() => {
    * Exporta GIF animado (encoder próprio js/gif.js) usando as fotos do
    * carrossel: selecionadas ou todas. Frames normalizados no canvas base do
    * MAIOR tamanho (letterbox branco) — fotos de tamanhos diferentes cabem.
+   * Com "Fade" ativo, insere frames interpolados (cross-dissolve) entre as
+   * fotos via GIF.fadeSequence — o GIF "funde" uma na outra.
    */
   function exportGIF(docs) {
     if (!docs.length) { toast('Nenhuma foto para exportar'); return; }
@@ -1008,16 +1010,88 @@ const App = (() => {
       ctx.drawImage(doc.current, (w - dw) / 2, (h - dh) / 2, dw, dh);
       frames.push(Editor.toImageData(c));
     }
-    const bytes = GIF.encodeGIF(w, h, frames, GIF.normalizeDelay($('gifDelay') ? $('gifDelay').value : 600));
+    const delay = GIF.normalizeDelay($('gifDelay') ? $('gifDelay').value : 600);
+    // fade: transição suave (cross-dissolve) — delay curto nos frames intermediários
+    const fadeOn = $('gifFade') ? $('gifFade').checked : false;
+    const gifFrames = fadeOn ? GIF.fadeSequence(frames, 3, Math.round(Math.min(160, Math.max(60, delay / 6)))) : frames;
+    const bytes = GIF.encodeGIF(w, h, gifFrames, delay);
     const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
     download(new Blob([bytes], { type: 'image/gif' }), `slideshow-jarvis-${stamp}.gif`);
-    toast(`GIF gerado com ${docs.length} fotos ✓ (${GIF.normalizeDelay($('gifDelay') ? $('gifDelay').value : 600)}ms/foto)`);
+    toast(`GIF gerado com ${docs.length} fotos ✓ (${delay}ms/foto${fadeOn ? ' + fade' : ''})`);
   }
 
-  /** Mostra o campo de delay do GIF só quando o formato selecionado é GIF. */
-  function syncGifDelayVisibility() {
-    const wrap = $('gifDelayWrap');
-    if (wrap) wrap.classList.toggle('hidden', $('exportFormat').value !== 'gif');
+  /** Mostra delay + fade só quando o formato é GIF ou vídeo (slideshow). */
+  function syncExportExtras() {
+    const show = ['gif', 'video'].includes($('exportFormat').value);
+    const delayWrap = $('gifDelayWrap');
+    if (delayWrap) delayWrap.classList.toggle('hidden', !show);
+    const fadeWrap = $('gifFadeWrap');
+    if (fadeWrap) fadeWrap.classList.toggle('hidden', !show);
+  }
+
+  /**
+   * Exporta VÍDEO (MP4/WebM) do slideshow via MediaRecorder NATIVO
+   * (js/video.js — zero dependência, 100% offline). A gravação é em TEMPO
+   * REAL (N fotos × delay); o toast mostra o progresso. Com "Fade", faz
+   * cross-dissolve entre as fotos durante a gravação.
+   */
+  function exportVideo(docs) {
+    if (!docs.length) { toast('Nenhuma foto para exportar'); return; }
+    if (docs.length < 2) { toast('Adicione 2+ fotos para gerar um vídeo'); return; }
+    const mime = Video.pickVideoMime((m) => window.MediaRecorder && MediaRecorder.isTypeSupported(m));
+    if (!mime) { toast('Este navegador não suporta gravação de vídeo'); return; }
+    const w = Math.max(...docs.map(d => d.current.width));
+    const h = Math.max(...docs.map(d => d.current.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    const delay = GIF.normalizeDelay($('gifDelay') ? $('gifDelay').value : 600);
+    const fadeOn = $('gifFade') ? $('gifFade').checked : false;
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+    const drawLayer = (im, alpha) => {
+      const fw = im.width, fh = im.height;
+      const scale = Math.min(w / fw, h / fh);
+      const dw = fw * scale, dh = fh * scale;
+      ctx.globalAlpha = alpha;
+      ctx.drawImage(im, (w - dw) / 2, (h - dh) / 2, dw, dh);
+      ctx.globalAlpha = 1;
+    };
+    const drawSlide = (im) => {
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, w, h);
+      drawLayer(im, 1);
+    };
+
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    const ext = Video.videoExt(mime);
+    toast(`Gerando vídeo (tempo real): ${docs.length} fotos × ${delay}ms...`);
+    Video.exportVideo(canvas, mime, async () => {
+      for (let i = 0; i < docs.length; i++) {
+        drawSlide(docs[i].current);
+        await sleep(delay);
+        // cross-dissolve para a próxima foto (fade): 6 passos rápidos
+        if (fadeOn && i < docs.length - 1) {
+          const a = docs[i].current, b = docs[i + 1].current;
+          const steps = 6;
+          for (let s = 1; s <= steps; s++) {
+            const t = s / (steps + 1);
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, w, h);
+            drawLayer(a, 1 - t);
+            drawLayer(b, t);
+            await sleep(Math.round(delay / 5));
+          }
+        }
+        toast(`Gerando vídeo: foto ${i + 1}/${docs.length}...`);
+      }
+    }).then((blob) => {
+      if (!blob || !blob.size) { toast('Falha ao gerar vídeo'); return; }
+      download(blob, `slideshow-jarvis-${stamp}.${ext}`);
+      toast(`Vídeo gerado ✓ (${docs.length} fotos, ${ext.toUpperCase()})`);
+    }).catch((err) => {
+      toast(err && err.message ? err.message : 'Falha ao gerar vídeo');
+    });
   }
 
   /**
@@ -1050,7 +1124,9 @@ const App = (() => {
     const docs = selectedDocs().length > 0 ? selectedDocs() : state.docs;
     if (!docs.length) { toast('Nenhuma foto para exportar'); return; }
     const format = $('exportFormat').value;
+    // slideshow (GIF animado / vídeo) usa o carrossel inteiro
     if (format === 'gif') { exportGIF(docs); return; }
+    if (format === 'video') { exportVideo(docs); return; }
     const sig = state.settings.signature;
     let count = 0, failed = 0;
     for (const doc of docs) {
@@ -1299,10 +1375,10 @@ const App = (() => {
     const doc = currentDoc();
     if (!doc) { toast('Abra uma foto primeiro'); return; }
     const format = $('exportFormat').value;
-    // GIF animado: usa o carrossel (selecionadas ou todas) — uma foto só vira aviso
-    if (format === 'gif') {
+    // slideshow (GIF animado / vídeo): usa o carrossel (selecionadas ou todas)
+    if (format === 'gif' || format === 'video') {
       const docs = selectedDocs().length > 0 ? selectedDocs() : state.docs;
-      exportGIF(docs);
+      if (format === 'gif') exportGIF(docs); else exportVideo(docs);
       return;
     }
     const sig = state.settings.signature;
@@ -1321,10 +1397,10 @@ const App = (() => {
     const doc = currentDoc();
     if (!doc) { toast('Abra uma foto primeiro'); return; }
     const format = $('exportFormat').value;
-    // GIF animado: share/clipboard não fazem sentido → download direto
-    if (format === 'gif') {
+    // slideshow (GIF/vídeo): share/clipboard não fazem sentido → download direto
+    if (format === 'gif' || format === 'video') {
       const docs = selectedDocs().length > 0 ? selectedDocs() : state.docs;
-      exportGIF(docs);
+      if (format === 'gif') exportGIF(docs); else exportVideo(docs);
       return;
     }
     const sig = state.settings.signature;
@@ -1375,7 +1451,7 @@ const App = (() => {
     });
     $('btnExport').addEventListener('click', exportCurrent);
     $('btnShare').addEventListener('click', shareCurrent);
-    $('exportFormat').addEventListener('change', syncGifDelayVisibility);
+    $('exportFormat').addEventListener('change', syncExportExtras);
     $('btnBestFrame').addEventListener('click', rankBestFrame);
     $('btnClose').addEventListener('click', () => currentDoc() && closeDoc(currentDoc().id));
     $('btnClearSel').addEventListener('click', () => {
@@ -1470,7 +1546,7 @@ const App = (() => {
     buildFilterGrid();
     buildFrameGrid();
     buildPresetBar();
-    syncGifDelayVisibility();
+    syncExportExtras();
     updateStyleBadge();
     $('autoStyleToggle').checked = !!state.settings.autoStyle;
     render();

@@ -17,6 +17,8 @@ const ASSETS = [
   'js/ai.js',
   'js/editor.js',
   'js/sharekit.js',
+  'js/gif.js',
+  'js/video.js',
   'js/app.js',
   'assets/logo.png',
   'icons/icon-192.png',

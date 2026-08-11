@@ -27,9 +27,13 @@
     <option value="jpeg">JPG</option>
     <option value="webp">WEBP</option>
     <option value="gif">GIF animado</option>
+    <option value="video">Vídeo (MP4/WebM)</option>
   </select>
-  <label id="gifDelayWrap" class="gif-delay hidden" title="Velocidade do slideshow GIF (100 a 5000 ms por foto)">
+  <label id="gifDelayWrap" class="gif-delay hidden" title="Velocidade do slideshow GIF/vídeo (100 a 5000 ms por foto)">
     <input id="gifDelay" type="number" min="100" max="5000" step="50" value="600">ms
+  </label>
+  <label id="gifFadeWrap" class="gif-delay hidden" title="Transição suave (cross-dissolve) entre as fotos">
+    <input id="gifFade" type="checkbox"> Fade
   </label>
   <span class="sep"></span>
   <button id="btnUndo" title="Desfazer (Ctrl+Z)">↩ <span class="lbl">Desfazer</span></button>
@@ -305,6 +309,7 @@
 <script src="js/editor.js"></script>
   <script src="js/sharekit.js"></script>
   <script src="js/gif.js"></script>
+  <script src="js/video.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

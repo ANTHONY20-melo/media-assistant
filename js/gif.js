@@ -225,12 +225,65 @@ const GIF = (() => {
     return blocks;
   }
 
+  /* ------------------------------------------------------------ transições */
+
+  /**
+   * Interpola dois ImageData do MESMO tamanho (cross-dissolve).
+   * t = 0 → cópia de A; t = 1 → cópia de B; 0 < t < 1 → mistura linear.
+   * Zero-trust: t fora de [0,1] (incl. NaN/'2'/null) é clampado; tamanhos
+   * diferentes → retorna null (o chamador decide — não interpola distorcido).
+   * Pura e testável em Node.
+   */
+  function blendImages(imA, imB, t) {
+    if (!imA || !imB || imA.width !== imB.width || imA.height !== imB.height) return null;
+    const n = imA.width * imA.height;
+    const a = imA.data, b = imB.data;
+    const f = Math.max(0, Math.min(1, Number(t) || 0));
+    const data = new Uint8ClampedArray(n * 4);
+    for (let i = 0; i < n; i++) {
+      const j = i * 4;
+      data[j] = a[j] + (b[j] - a[j]) * f;
+      data[j + 1] = a[j + 1] + (b[j + 1] - a[j + 1]) * f;
+      data[j + 2] = a[j + 2] + (b[j + 2] - a[j + 2]) * f;
+      data[j + 3] = 255;
+    }
+    return { data, width: imA.width, height: imA.height };
+  }
+
+  /**
+   * Gera a sequência de frames com transição suave (cross-dissolve) entre eles.
+   * Para cada par A→B insere `steps` frames intermediários (delay curto) — o GIF
+   * "funde" uma foto na outra em vez de cortar seco. Pura e testável.
+   * - frames < 2 → cópia do array (sem transição)
+   * - pares de tamanhos diferentes → não interpola (fica o corte seco)
+   * - steps <= 0 ou inválido → sem fade; stepDelayMs clampado 40..1000
+   */
+  function fadeSequence(frames, steps = 3, stepDelayMs = 80) {
+    if (!Array.isArray(frames) || frames.length < 2) return Array.isArray(frames) ? frames.slice() : [];
+    const nSteps = Math.max(0, Math.min(12, Math.floor(Number(steps) || 0)));
+    if (!nSteps) return frames.slice();
+    const stepDelay = Math.max(40, Math.min(1000, Number(stepDelayMs) || 80));
+    const out = [];
+    for (let i = 0; i < frames.length - 1; i++) {
+      out.push(frames[i]);
+      const a = frames[i], b = frames[i + 1];
+      if (!a || !b || a.width !== b.width || a.height !== b.height) continue;
+      for (let s = 1; s <= nSteps; s++) {
+        const blend = blendImages(a, b, s / (nSteps + 1));
+        out.push({ data: blend.data, width: blend.width, height: blend.height, delay: stepDelay });
+      }
+    }
+    out.push(frames[frames.length - 1]);
+    return out;
+  }
+
   /**
    * Monta o GIF89a.
    * @param {number} width  largura (todos os frames devem ter o mesmo tamanho)
    * @param {number} height altura
-   * @param {Array<{data: Uint8ClampedArray, width, height}>} frames — ImageData-like
-   * @param {number} delayMs atraso por frame em milissegundos
+   * @param {Array<{data: Uint8ClampedArray, width, height, delay?}>} frames — ImageData-like;
+   *   `delay` (ms) por frame é opcional (transições: frame intermediário com delay curto)
+   * @param {number} delayMs atraso padrão por frame em milissegundos
    * @returns {Uint8Array} bytes do GIF
    */
   function encodeGIF(width, height, frames, delayMs = 600) {
@@ -247,10 +300,12 @@ const GIF = (() => {
       const gctSize = Math.max(0, Math.ceil(Math.log2(nColors)) - 1);
       const gctEntries = 1 << (gctSize + 1);
 
+      const delay = frame && Number.isFinite(frame.delay) ? frame.delay : delayMs;
+
       // graphic control extension: 21 f9 04 + packed + delay(2) + transp + term
       out.push(0x21, 0xF9, 0x04);
       out.push(0x02); // packed: disposal=2 (restore bg) + transparent off
-      out.push(...u16le(Math.max(1, Math.round(delayMs / 10))));
+      out.push(...u16le(Math.max(1, Math.round(delay / 10))));
       out.push(0x00, 0x00);
 
       // image descriptor com LCT
@@ -274,7 +329,7 @@ const GIF = (() => {
     return Uint8Array.from(out);
   }
 
-  return { quantize, lzwEncode, encodeGIF, normalizeDelay };
+  return { quantize, lzwEncode, encodeGIF, normalizeDelay, blendImages, fadeSequence };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = GIF;

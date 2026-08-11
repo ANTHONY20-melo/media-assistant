@@ -136,6 +136,13 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   font-size: 12px;
 }
 .gif-delay input::-webkit-inner-spin-button { opacity: .4; }
+.gif-delay input[type="checkbox"] {
+  width: 13px;
+  height: 13px;
+  margin: 0 2px 0 6px;
+  accent-color: #2D4A6E;
+  cursor: pointer;
+}
 
 /* ---------- layout ---------- */
 main { flex: 1; display: flex; min-height: 0; }
