@@ -1,0 +1,53 @@
+{
+  "name": "jarvis-studio-desktop",
+  "productName": "JARVIS Studio",
+  "version": "1.0.0",
+  "description": "JARVIS Studio — Assistente de Mídia (desktop). Analise, corrija, gere legendas e assine fotos. 100% offline.",
+  "main": "main.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ANTHONY20-melo/media-assistant.git"
+  },
+  "author": "JARVIS <jarvis@anthony>",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "smoke": "electron . --smoke",
+    "dist": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^33.4.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "br.com.jarvis.studio",
+    "productName": "JARVIS Studio",
+    "publish": {
+      "provider": "github",
+      "owner": "ANTHONY20-melo",
+      "repo": "media-assistant"
+    },
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "../index.html",
+      "../manifest.webmanifest",
+      "../css/**/*",
+      "../js/**/*",
+      "../assets/**/*",
+      "../icons/**/*"
+    ],
+    "win": {
+      "target": ["nsis"],
+      "icon": "../icons/icon-512.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "JARVIS Studio"
+    }
+  }
+}

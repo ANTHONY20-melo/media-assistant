@@ -4,7 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>JARVIS Studio — Assistente de Mídia</title>
+<meta name="description" content="Analise, corrija, gere legendas e assine suas fotos com o JARVIS. 100% offline.">
+<meta name="theme-color" content="#1B2637">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="JARVIS Studio">
+<link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="assets/logo.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -13,9 +21,11 @@
   <span class="brand"><img class="brand-logo" src="assets/logo.png" alt="Logo"> JARVIS Studio <small>assistente de mídia</small></span>
   <button id="btnOpen" title="Abrir imagens">📂 <span class="lbl">Abrir</span></button>
   <button id="btnExport" title="Exportar (Ctrl+S)">💾 <span class="lbl">Exportar</span></button>
+  <button id="btnShare" title="Compartilhar esta foto">📤 <span class="lbl">Compartilhar</span></button>
   <select id="exportFormat" title="Formato de exportação">
     <option value="png" selected>PNG</option>
     <option value="jpeg">JPG</option>
+    <option value="webp">WEBP</option>
   </select>
   <span class="sep"></span>
   <button id="btnUndo" title="Desfazer (Ctrl+Z)">↩ <span class="lbl">Desfazer</span></button>
@@ -24,6 +34,7 @@
    <button id="btnZoomOut" title="Zoom −">🔍 −</button>
    <button id="btnZoomIn" title="Zoom +">🔍 +</button>
    <button id="btnZoomFit" title="Ajustar à tela">⤢</button>
+   <button id="btnCompare" title="Comparar antes/depois">↔ <span class="lbl">Comparar</span></button>
    <span id="zoomPct" class="zoom-pct">100%</span>
    <span class="spacer"></span>
    <button id="btnBatchEnhance" title="Aplicar correção ideal em todas as selecionadas">🎯 <span class="lbl">Corrigir todas</span></button>
@@ -57,6 +68,13 @@
         <button id="cropApply" class="accent">✂️ Aplicar corte</button>
       </div>
     </div>
+    <div id="compareOverlay" class="compare-overlay hidden">
+      <canvas id="compareAfter"></canvas>
+      <canvas id="compareBefore" class="compare-before"></canvas>
+      <div id="compareHandle" class="compare-handle"></div>
+      <div class="compare-label compare-label-before">Antes</div>
+      <div class="compare-label compare-label-after">Depois</div>
+    </div>
     <div class="empty" id="emptyHint">
       <img class="empty-logo" src="assets/logo.png" alt="JARVIS Studio">
       <div>Abra uma ou mais fotos para o <b>JARVIS</b> analisar, corrigir e preparar sua postagem.</div>
@@ -87,6 +105,10 @@
       <div class="row-buttons">
         <button id="btnCrop" class="accent" title="Recortar a imagem com seleção arrastável">✂️ Cortar</button>
         <button id="btnCropReset" class="ghost" title="Restaurar ao original">↩ Original</button>
+      </div>
+      <div class="hist-box">
+        <canvas id="histogramCanvas" width="288" height="64"></canvas>
+        <p class="hint">Histograma de luminância da foto atual (escuro ← → claro).</p>
       </div>
       <div class="slider-row"><label>Brilho</label><input type="range" id="s-brightness" min="-100" max="100" value="0"><span id="v-brightness">0</span></div>
       <div class="slider-row"><label>Contraste</label><input type="range" id="s-contrast" min="-100" max="100" value="0"><span id="v-contrast">0</span></div>
@@ -275,6 +297,7 @@
 <script src="js/captions.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/editor.js"></script>
+<script src="js/sharekit.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

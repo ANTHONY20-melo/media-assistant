@@ -672,4 +672,37 @@ test('styleLabel: null/estilo inválido retorna null (badge vazia)', () => {
   assert.equal(Editor.styleLabel({}), 'Estilo');
 });
 
+// ---- histograma visual (histToBars é pura e alimenta o mini-canvas da UI) ----
+
+test('histToBars: histograma sólido concentra tudo num bin', () => {
+  const hist = new Array(256).fill(0);
+  hist[200] = 100;
+  const bars = Editor.histToBars(hist, 4);
+  assert.equal(bars.length, 4);
+  assert.equal(bars[3], 100); // 200/64 = 3.125 → bin 3
+  assert.equal(bars[0] + bars[1] + bars[2], 0);
+});
+
+test('histToBars: distribuição uniforme espalha pelos bins', () => {
+  const hist = new Array(256).fill(1);
+  const bars = Editor.histToBars(hist, 4);
+  assert.equal(bars.length, 4);
+  assert.ok(bars.every(b => b === 64)); // 256 valores / 4 bins = 64 cada
+});
+
+test('histToBars: 256 bins preserva o histograma original', () => {
+  const hist = new Array(256).fill(0);
+  hist[10] = 5; hist[255] = 9;
+  const bars = Editor.histToBars(hist, 256);
+  assert.equal(bars[10], 5);
+  assert.equal(bars[255], 9);
+  assert.equal(bars.reduce((a, b) => a + b, 0), 14);
+});
+
+test('histToBars: vazio devolve bins zerados; bins <= 0 vira 1', () => {
+  assert.deepEqual(Editor.histToBars(new Array(256).fill(0), 8), [0, 0, 0, 0, 0, 0, 0, 0]);
+  assert.equal(Editor.histToBars(new Array(256).fill(0), 0).length, 1);
+  assert.equal(Editor.histToBars(new Array(256).fill(0), -3).length, 1);
+});
+
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }

@@ -205,6 +205,71 @@ main { flex: 1; display: flex; min-height: 0; }
 
 .hint { font-size: 11px; color: var(--fg2); line-height: 1.45; }
 
+/* ---------- histograma de luminância ---------- */
+.hist-box {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.hist-box canvas { width: 100%; height: 64px; display: block; background: var(--panel); border-radius: 4px; }
+
+/* ---------- comparar antes/depois ---------- */
+.compare-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  overflow: hidden;
+  touch-action: none;
+  background: rgba(18, 24, 36, .35);
+}
+.compare-overlay canvas { position: absolute; }
+.compare-overlay .compare-before { clip-path: inset(0 50% 0 0); }
+.compare-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(27,38,55,.5), 0 0 10px rgba(0,0,0,.45);
+  cursor: ew-resize;
+  touch-action: none;
+}
+.compare-handle::after {
+  content: '↔';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #fff;
+  color: var(--navy);
+  font-size: 12px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,.4);
+  pointer-events: none;
+}
+.compare-label {
+  position: absolute;
+  top: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(27,38,55,.82);
+  color: #fff;
+  padding: 4px 9px;
+  border-radius: 12px;
+  pointer-events: none;
+}
+.compare-label-before { left: 10px; }
+.compare-label-after { right: 10px; }
+
 /* ---------- filtros ---------- */
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .grid button { font-size: 12px; padding: 8px 4px; }

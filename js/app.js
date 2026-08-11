@@ -17,6 +17,8 @@ const App = (() => {
     lastRecommendations: null,
     previewSignature: false,
     signImage: null, // HTMLImageElement da assinatura por imagem (quando mode='image')
+    compare: false,       // overlay comparar antes/depois ativo
+    comparePos: 0.5,      // posição do divisor (0..1)
     settings: Storage.loadSettings(),
   };
 
@@ -52,6 +54,11 @@ const App = (() => {
     const availW = Math.max(60, stage.clientWidth - 32);
     const availH = Math.max(60, stage.clientHeight - 32);
     return Math.max(0.02, Math.min(1, availW / doc.current.width, availH / doc.current.height));
+  }
+
+  /** Extensão de arquivo do formato de exportação. */
+  function ext(format) {
+    return format === 'jpeg' ? 'jpg' : format || 'png';
   }
 
   function setZoom(z) {
@@ -156,6 +163,7 @@ const App = (() => {
 
   function selectDoc(id) {
     if (state.crop) exitCrop(false);
+    if (state.compare) exitCompare();
     state.currentId = id;
     state.zoomMode = 'fit';
     state.zoom = computeFit();
@@ -171,6 +179,7 @@ const App = (() => {
     const idx = state.docs.findIndex(d => d.id === id);
     if (idx === -1) return;
     if (state.crop) exitCrop(false);
+    if (state.compare) exitCompare();
     state.docs.splice(idx, 1);
     if (state.currentId === id) {
       const next = state.docs[Math.min(idx, state.docs.length - 1)];
@@ -240,11 +249,16 @@ const App = (() => {
       canvas.style.display = 'none';
       empty.style.display = 'flex';
       $('btnExport').disabled = true;
+      $('btnShare').disabled = true;
+      $('btnCompare').disabled = true;
       $('zoomPct').textContent = '100%';
+      drawHistogram();
       return;
     }
     empty.style.display = 'none';
     $('btnExport').disabled = false;
+    $('btnShare').disabled = false;
+    $('btnCompare').disabled = false;
     canvas.style.display = 'block';
     canvas.width = doc.current.width;
     canvas.height = doc.current.height;
@@ -259,6 +273,17 @@ const App = (() => {
     canvas.style.height = Math.max(1, Math.round(canvas.height * z)) + 'px';
     $('zoomPct').textContent = Math.round(z * 100) + '%';
     if (state.crop) positionCropOverlay();
+    drawHistogram();
+    if (state.compare) {
+      // mantém o "depois" sempre atualizado (filtros/ações aplicados durante o compare)
+      const after = $('compareAfter');
+      if (after.width !== doc.current.width || after.height !== doc.current.height) {
+        after.width = doc.current.width;
+        after.height = doc.current.height;
+      }
+      after.getContext('2d').drawImage(doc.current, 0, 0);
+      positionCompare();
+    }
   }
 
   function renderCarousel() {
@@ -564,6 +589,123 @@ const App = (() => {
     cropDrag = null;
   }
 
+  /* ------------------------------------------------------------ comparar antes/depois */
+
+  function toggleCompare() {
+    const doc = currentDoc();
+    if (!doc) { toast('Abra uma foto primeiro'); return; }
+    state.compare = !state.compare;
+    if (state.compare) {
+      rebuildCompare();
+      positionCompare();
+      $('compareOverlay').classList.remove('hidden');
+      toast('Comparando: arraste o divisor ↔');
+    } else {
+      exitCompare();
+    }
+  }
+
+  function exitCompare() {
+    state.compare = false;
+    $('compareOverlay').classList.add('hidden');
+  }
+
+  /** Copia original (antes) e atual (depois) para os canvases do comparador. */
+  function rebuildCompare() {
+    const doc = currentDoc();
+    if (!doc) return;
+    const before = $('compareBefore');
+    const after = $('compareAfter');
+    before.width = doc.original.width;
+    before.height = doc.original.height;
+    before.getContext('2d').drawImage(doc.original, 0, 0);
+    after.width = doc.current.width;
+    after.height = doc.current.height;
+    after.getContext('2d').drawImage(doc.current, 0, 0);
+  }
+
+  /** Posiciona os canvases/handle do comparador sobre o stage (coordenadas da tela). */
+  function positionCompare() {
+    const doc = currentDoc();
+    if (!doc || !state.compare) return;
+    const canvas = $('stageCanvas');
+    const stage = $('stage');
+    const cr = canvas.getBoundingClientRect();
+    const sr = stage.getBoundingClientRect();
+    const L = cr.left - sr.left;
+    const T = cr.top - sr.top;
+    const W = cr.width;
+    const H = cr.height;
+    const pos = Math.max(0, Math.min(1, state.comparePos));
+    const before = $('compareBefore');
+    const after = $('compareAfter');
+    for (const cv of [before, after]) {
+      cv.style.left = L + 'px';
+      cv.style.top = T + 'px';
+      cv.style.width = W + 'px';
+      cv.style.height = H + 'px';
+    }
+    // o "antes" aparece à esquerda do divisor (inset no lado direito)
+    before.style.clipPath = `inset(0 ${(1 - pos) * 100}% 0 0)`;
+    const handle = $('compareHandle');
+    handle.style.left = (L + W * pos) + 'px';
+  }
+
+  let compareDrag = false;
+
+  function onComparePointerDown(e) {
+    if (!state.compare) return;
+    e.preventDefault();
+    e.stopPropagation();
+    compareDrag = true;
+    window.addEventListener('pointermove', onComparePointerMove);
+    window.addEventListener('pointerup', onComparePointerUp);
+    window.addEventListener('pointercancel', onComparePointerUp);
+  }
+
+  function onComparePointerMove(e) {
+    if (!state.compare || !compareDrag) return;
+    e.preventDefault();
+    const stage = $('stage');
+    const sr = stage.getBoundingClientRect();
+    const canvas = $('stageCanvas');
+    const cr = canvas.getBoundingClientRect();
+    const L = cr.left - sr.left;
+    state.comparePos = cr.width > 0 ? clamp((e.clientX - (sr.left + L)) / cr.width, 0, 1) : 0.5;
+    positionCompare();
+  }
+
+  function onComparePointerUp() {
+    compareDrag = false;
+    window.removeEventListener('pointermove', onComparePointerMove);
+    window.removeEventListener('pointerup', onComparePointerUp);
+    window.removeEventListener('pointercancel', onComparePointerUp);
+  }
+
+  /* ------------------------------------------------------------ histograma */
+
+  /** Desenha o histograma de luminância da foto atual na aba Ajustes. */
+  function drawHistogram() {
+    const cv = $('histogramCanvas');
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    const doc = currentDoc();
+    if (!doc) {
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      return;
+    }
+    const hist = Editor.histOf(Editor.toImageData(doc.current));
+    const bars = Editor.histToBars(hist, cv.width);
+    const max = Math.max(1, ...bars);
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    const barW = cv.width / bars.length;
+    for (let i = 0; i < bars.length; i++) {
+      const h = Math.max(1, Math.round((bars[i] / max) * (cv.height - 4)));
+      ctx.fillStyle = i < bars.length / 2 ? '#2D4A6E' : '#1B2637';
+      ctx.fillRect(i * barW + 1, cv.height - h, Math.max(1, barW - 2), h);
+    }
+  }
+
   /* ------------------------------------------------------------ análise JARVIS */
 
   function hideDiagnosis() {
@@ -791,13 +933,13 @@ const App = (() => {
     const sig = state.settings.signature;
     let count = 0, failed = 0;
     for (const doc of docs) {
-      Editor.exportCanvas(doc.current, format, format === 'jpeg' ? 0.92 : 1, sig, sig.enabled, (blob) => {
+      Editor.exportCanvas(doc.current, format, quality(format), sig, sig.enabled, (blob) => {
         if (!blob) {
           failed++;
           toast(`Falha ao exportar ${doc.name}`);
         } else {
           const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-          download(blob, `${doc.name}-jarvis-${stamp}.${format === 'jpeg' ? 'jpg' : 'png'}`);
+          download(blob, `${doc.name}-jarvis-${stamp}.${ext(format)}`);
           count++;
         }
         if (count + failed === docs.length) {
@@ -1028,16 +1170,64 @@ const App = (() => {
 
   /* ------------------------------------------------------------ export */
 
+  function quality(format) {
+    return format === 'png' ? 1 : 0.92;
+  }
+
   function exportCurrent() {
     const doc = currentDoc();
     if (!doc) { toast('Abra uma foto primeiro'); return; }
     const format = $('exportFormat').value;
     const sig = state.settings.signature;
-    Editor.exportCanvas(doc.current, format, format === 'jpeg' ? 0.92 : 1, sig, sig.enabled, (blob) => {
+    Editor.exportCanvas(doc.current, format, quality(format), sig, sig.enabled, (blob) => {
       if (!blob) { toast('Falha ao exportar'); return; }
       const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-      download(blob, `${doc.name}-jarvis-${stamp}.${format === 'jpeg' ? 'jpg' : 'png'}`);
+      download(blob, `${doc.name}-jarvis-${stamp}.${ext(format)}`);
       toast('Exportado com assinatura ✓');
+    }, state.signImage);
+  }
+
+  /* ------------------------------------------------------------ compartilhar */
+
+  /** Compartilha a foto atual: Web Share nativo → clipboard → download (cascata). */
+  function shareCurrent() {
+    const doc = currentDoc();
+    if (!doc) { toast('Abra uma foto primeiro'); return; }
+    const format = $('exportFormat').value;
+    const sig = state.settings.signature;
+    const strategy = ShareKit.pickShareStrategy(navigator);
+    Editor.exportCanvas(doc.current, format, quality(format), sig, sig.enabled, async (blob) => {
+      if (!blob) { toast('Falha ao exportar'); return; }
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      const filename = `${doc.name}-jarvis-${stamp}.${ext(format)}`;
+
+      // 1) Web Share API (nativo do celular/desktop) — pode cancelar (AbortError = silêncio)
+      if (strategy === 'share') {
+        try {
+          const file = new File([blob], filename, { type: blob.type });
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: doc.name });
+            toast('Compartilhado ✓');
+            return;
+          }
+        } catch (err) {
+          if (err.name === 'AbortError') return; // usuário cancelou — não é erro
+        }
+        // sem suporte a arquivos ou falha: cai no clipboard/download
+      }
+
+      // 2) clipboard (imagem) — só para PNG; se falhar cai no download
+      if (strategy === 'clipboard' && format === 'png') {
+        try {
+          await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+          toast('Imagem copiada! Cole onde quiser');
+          return;
+        } catch (_e) { /* permissão negada → download */ }
+      }
+
+      // 3) download universal (funciona em qualquer ambiente, incl. Electron)
+      download(blob, filename);
+      toast('Imagem baixada ✓');
     }, state.signImage);
   }
 
@@ -1051,6 +1241,7 @@ const App = (() => {
       e.target.value = '';
     });
     $('btnExport').addEventListener('click', exportCurrent);
+    $('btnShare').addEventListener('click', shareCurrent);
     $('btnClose').addEventListener('click', () => currentDoc() && closeDoc(currentDoc().id));
     $('btnClearSel').addEventListener('click', () => {
       for (const d of state.docs) d._selected = false;
@@ -1062,6 +1253,8 @@ const App = (() => {
     $('btnZoomIn').addEventListener('click', () => setZoom(state.zoom * 1.25));
     $('btnZoomOut').addEventListener('click', () => setZoom(state.zoom / 1.25));
     $('btnZoomFit').addEventListener('click', () => { state.zoomMode = 'fit'; state.zoom = computeFit(); render(); });
+    $('btnCompare').addEventListener('click', toggleCompare);
+    $('compareOverlay').addEventListener('pointerdown', onComparePointerDown);
     window.addEventListener('resize', () => {
       if (state.zoomMode === 'fit' && currentDoc()) {
         state.zoom = computeFit();
@@ -1146,6 +1339,14 @@ const App = (() => {
     render();
     renderCarousel();
     $('btnExport').disabled = true;
+    $('btnShare').disabled = true;
+    $('btnCompare').disabled = true;
+    // PWA offline: registra o service worker só em HTTPS ou localhost
+    // (nunca em file:// — ex.: versão desktop/Electron — para não duplicar cache)
+    if (('serviceWorker' in navigator) &&
+        (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+      navigator.serviceWorker.register('sw.js').catch(() => { /* offline/browser antigo: app funciona sem SW */ });
+    }
   }
 
   document.addEventListener('DOMContentLoaded', init);

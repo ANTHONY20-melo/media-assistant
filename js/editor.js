@@ -290,6 +290,21 @@ const Editor = (() => {
   }
 
   /**
+   * Reduz um histograma de 256 bins para N bins (para desenhar em tela pequena).
+   * Pura e testável — usado pelo histograma visual da aba Ajustes.
+   */
+  function histToBars(hist, bins) {
+    bins = Math.max(1, Math.floor(bins));
+    const out = new Array(bins).fill(0);
+    const perBin = 256 / bins;
+    for (let i = 0; i < 256; i++) {
+      const b = Math.min(bins - 1, Math.floor(i / perBin));
+      out[b] += hist[i] || 0;
+    }
+    return out;
+  }
+
+  /**
    * Correção ideal profissional (substitui o autoEnhance "estranho"):
    *  1. Balanço de branco (gray world) — força 0.5, máscara de luminosidade
    *  2. Auto Tone — black/white points (percentis) + gamma do midtone
@@ -1288,7 +1303,7 @@ const Editor = (() => {
     signatureImageRect,
     // motor profissional (puro, testável)
     percentile, buildToneLUT, applyLutLuminosity, grayWorldCast, applyCast,
-    sCurveLUT, sharpenLuminosity, histOf, saturationOf,
+    sCurveLUT, sharpenLuminosity, histOf, saturationOf, histToBars,
     // recorte
     crop, cropData,
     // estilos automáticos + molduras (bordas, shaped, multi-slot)
